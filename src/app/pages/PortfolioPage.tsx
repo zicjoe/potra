@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ExternalLink, Rocket, Droplets, Wallet } from "lucide-react";
+import { ExternalLink, Rocket, Droplets, Wallet, Waypoints } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Button } from "../components/ui/button";
@@ -7,24 +7,29 @@ import { Badge } from "../components/ui/badge";
 import { usePortaldot } from "../providers/PortaldotProvider";
 import { getLaunchedAssets, LaunchAssetResult } from "../blockchain/assets";
 import { getLiquidityPositions, LiquidityPosition } from "../blockchain/liquidity";
+import { getBridgeRecords, BridgeRecord } from "../blockchain/bridge";
 import { shortAddress } from "../config/env";
 
 export function PortfolioPage() {
   const { selectedAccount, potBalance } = usePortaldot();
   const [assets, setAssets] = useState<LaunchAssetResult[]>([]);
   const [positions, setPositions] = useState<LiquidityPosition[]>([]);
+  const [bridges, setBridges] = useState<BridgeRecord[]>([]);
 
   useEffect(() => {
     const refresh = () => {
       setAssets(getLaunchedAssets());
       setPositions(getLiquidityPositions());
+      setBridges(getBridgeRecords());
     };
     refresh();
     window.addEventListener("potra:asset-launched", refresh);
     window.addEventListener("potra:liquidity-created", refresh);
+    window.addEventListener("potra:bridge-completed", refresh);
     return () => {
       window.removeEventListener("potra:asset-launched", refresh);
       window.removeEventListener("potra:liquidity-created", refresh);
+      window.removeEventListener("potra:bridge-completed", refresh);
     };
   }, []);
 
@@ -49,8 +54,8 @@ export function PortfolioPage() {
           <CardContent><p className="text-3xl font-bold">{assets.length}</p><p className="text-sm text-muted-foreground mt-2">Assets pallet</p></CardContent>
         </Card>
         <Card className="bg-card/50 border-border/50">
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-normal text-muted-foreground">LP Positions</CardTitle></CardHeader>
-          <CardContent><p className="text-3xl font-bold">{positions.length}</p><p className="text-sm text-muted-foreground mt-2">Onchain vaults</p></CardContent>
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-normal text-muted-foreground">Bridge Receipts</CardTitle></CardHeader>
+          <CardContent><p className="text-3xl font-bold">{bridges.length}</p><p className="text-sm text-muted-foreground mt-2">Wrapped assets</p></CardContent>
         </Card>
       </div>
 
@@ -76,7 +81,13 @@ export function PortfolioPage() {
                     <div className="text-right"><p className="font-semibold">{Number(asset.totalSupply).toLocaleString()}</p><p className="text-sm text-muted-foreground">Minted supply</p></div>
                   </div>
                 ))}
-                {assets.length === 0 && <div className="p-6 rounded-xl bg-muted/20 border border-border/50 text-sm text-muted-foreground">No launched assets recorded yet.</div>}
+                {bridges.map((bridge) => (
+                  <div key={bridge.id} className="flex items-center justify-between p-4 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center gap-4"><div className="size-12 rounded-full bg-info/10 border border-info/20 flex items-center justify-center"><Waypoints className="size-5 text-info" /></div><div><div className="flex items-center gap-2"><p className="font-semibold">{bridge.assetSymbol}</p><Badge variant="outline">#{bridge.assetId}</Badge></div><p className="text-sm text-muted-foreground">{bridge.assetName}</p></div></div>
+                    <div className="text-right"><p className="font-semibold">{bridge.amount}</p><p className="text-sm text-muted-foreground">Bridged balance</p></div>
+                  </div>
+                ))}
+                {assets.length === 0 && bridges.length === 0 && <div className="p-6 rounded-xl bg-muted/20 border border-border/50 text-sm text-muted-foreground">No launched or bridged assets recorded yet.</div>}
               </div>
             </CardContent>
           </Card>
@@ -122,7 +133,13 @@ export function PortfolioPage() {
                     <div className="text-right flex items-center gap-4"><div><p className="font-medium">{position.potAmount} POT</p><p className="text-sm text-muted-foreground">{new Date(position.createdAt).toLocaleString()}</p></div><Button variant="ghost" size="icon"><ExternalLink className="size-4" /></Button></div>
                   </div>
                 ))}
-                {assets.length === 0 && positions.length === 0 && <div className="p-6 rounded-xl bg-muted/20 border border-border/50 text-sm text-muted-foreground">No transactions recorded yet.</div>}
+                {bridges.map((bridge) => (
+                  <div key={`bridge-${bridge.id}`} className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center gap-3"><div className="size-10 rounded-full bg-info/10 border border-info/20 flex items-center justify-center"><Waypoints className="size-4 text-info" /></div><div><p className="font-medium">Bridge Mint</p><p className="text-sm text-muted-foreground">{bridge.sourceNetwork} to Portaldot</p></div></div>
+                    <div className="text-right flex items-center gap-4"><div><p className="font-medium">{bridge.amount} {bridge.assetSymbol}</p><p className="text-sm text-muted-foreground">{new Date(bridge.createdAt).toLocaleString()}</p></div><Button variant="ghost" size="icon"><ExternalLink className="size-4" /></Button></div>
+                  </div>
+                ))}
+                {assets.length === 0 && positions.length === 0 && bridges.length === 0 && <div className="p-6 rounded-xl bg-muted/20 border border-border/50 text-sm text-muted-foreground">No transactions recorded yet.</div>}
               </div>
             </CardContent>
           </Card>

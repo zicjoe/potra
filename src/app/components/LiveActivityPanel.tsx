@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeftRight, Droplets, Rocket } from "lucide-react";
+import { ArrowLeftRight, Droplets, Rocket, Waypoints } from "lucide-react";
 import { ScrollArea } from "./ui/scroll-area";
 import { getLaunchedAssets } from "../blockchain/assets";
 import { getLiquidityPositions } from "../blockchain/liquidity";
 import { getSwapHistory } from "../blockchain/swap";
+import { getBridgeRecords } from "../blockchain/bridge";
 import { shortAddress } from "../config/env";
 
 type ActivityItem = {
@@ -34,12 +35,14 @@ export function LiveActivityPanel() {
     window.addEventListener("potra:liquidity-created", refresh);
     window.addEventListener("potra:liquidity-updated", refresh);
     window.addEventListener("potra:swap-executed", refresh);
+    window.addEventListener("potra:bridge-completed", refresh);
     const timer = window.setInterval(refresh, 60_000);
     return () => {
       window.removeEventListener("potra:asset-launched", refresh);
       window.removeEventListener("potra:liquidity-created", refresh);
       window.removeEventListener("potra:liquidity-updated", refresh);
       window.removeEventListener("potra:swap-executed", refresh);
+      window.removeEventListener("potra:bridge-completed", refresh);
       window.clearInterval(timer);
     };
   }, []);
@@ -70,7 +73,15 @@ export function LiveActivityPanel() {
       icon: ArrowLeftRight,
     }));
 
-    return [...swaps, ...liquidity, ...launches].slice(0, 12);
+    const bridges = getBridgeRecords().map((bridge) => ({
+      type: "bridge" as const,
+      user: shortAddress(bridge.recipient),
+      action: `Bridged ${bridge.amount} ${bridge.assetSymbol}`,
+      time: relativeTime(bridge.createdAt),
+      icon: Waypoints,
+    }));
+
+    return [...swaps, ...bridges, ...liquidity, ...launches].slice(0, 12);
   }, [tick]);
 
   return (

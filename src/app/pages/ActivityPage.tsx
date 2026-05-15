@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeftRight, Droplets, Filter, Rocket } from "lucide-react";
+import { ArrowLeftRight, Droplets, Filter, Rocket, Waypoints } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -7,10 +7,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs"
 import { getLaunchedAssets } from "../blockchain/assets";
 import { getLiquidityPositions } from "../blockchain/liquidity";
 import { getSwapHistory } from "../blockchain/swap";
+import { getBridgeRecords } from "../blockchain/bridge";
 import { shortAddress } from "../config/env";
 
 type Activity = {
-  type: "launch" | "liquidity" | "swap";
+  type: "launch" | "liquidity" | "swap" | "bridge";
   icon: typeof Rocket;
   user: string;
   action: string;
@@ -23,6 +24,7 @@ const typeColors: Record<string, string> = {
   launch: "bg-chart-4/10 border-chart-4/20 text-chart-4",
   liquidity: "bg-success/10 border-success/20 text-success",
   swap: "bg-primary/10 border-primary/20 text-primary",
+  bridge: "bg-info/10 border-info/20 text-info",
 };
 
 function relativeTime(dateString: string) {
@@ -45,12 +47,14 @@ export function ActivityPage() {
     window.addEventListener("potra:liquidity-created", refresh);
     window.addEventListener("potra:liquidity-updated", refresh);
     window.addEventListener("potra:swap-executed", refresh);
+    window.addEventListener("potra:bridge-completed", refresh);
     const timer = window.setInterval(refresh, 60_000);
     return () => {
       window.removeEventListener("potra:asset-launched", refresh);
       window.removeEventListener("potra:liquidity-created", refresh);
       window.removeEventListener("potra:liquidity-updated", refresh);
       window.removeEventListener("potra:swap-executed", refresh);
+      window.removeEventListener("potra:bridge-completed", refresh);
       window.clearInterval(timer);
     };
   }, []);
@@ -87,12 +91,23 @@ export function ActivityPage() {
       txHash: swap.outputTxHash,
     }));
 
-    return [...swaps, ...liquidity, ...launches];
+    const bridges = getBridgeRecords().map((bridge) => ({
+      type: "bridge" as const,
+      icon: Waypoints,
+      user: shortAddress(bridge.recipient),
+      action: `Bridged ${bridge.assetSymbol} into Portaldot`,
+      value: `${bridge.amount} ${bridge.assetSymbol}`,
+      time: relativeTime(bridge.createdAt),
+      txHash: bridge.mintTxHash,
+    }));
+
+    return [...swaps, ...bridges, ...liquidity, ...launches];
   }, [tick]);
 
   const launches = allActivity.filter((activity) => activity.type === "launch");
   const liquidity = allActivity.filter((activity) => activity.type === "liquidity");
   const swaps = allActivity.filter((activity) => activity.type === "swap");
+  const bridges = allActivity.filter((activity) => activity.type === "bridge");
 
   return (
     <div className="space-y-6">
@@ -127,12 +142,14 @@ export function ActivityPage() {
           <TabsTrigger value="launches">Launches<Badge variant="secondary" className="ml-2">{launches.length}</Badge></TabsTrigger>
           <TabsTrigger value="liquidity">Liquidity<Badge variant="secondary" className="ml-2">{liquidity.length}</Badge></TabsTrigger>
           <TabsTrigger value="swaps">Swaps<Badge variant="secondary" className="ml-2">{swaps.length}</Badge></TabsTrigger>
+          <TabsTrigger value="bridges">Bridges<Badge variant="secondary" className="ml-2">{bridges.length}</Badge></TabsTrigger>
         </TabsList>
 
         <TabsContent value="all"><ActivityList activities={allActivity} /></TabsContent>
         <TabsContent value="launches"><ActivityList activities={launches} /></TabsContent>
         <TabsContent value="liquidity"><ActivityList activities={liquidity} /></TabsContent>
         <TabsContent value="swaps"><ActivityList activities={swaps} /></TabsContent>
+        <TabsContent value="bridges"><ActivityList activities={bridges} /></TabsContent>
       </Tabs>
     </div>
   );

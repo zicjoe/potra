@@ -6,6 +6,12 @@ export const potraConfig = {
   faucetApi: import.meta.env.VITE_FAUCET_API || "http://localhost:8787",
   potDecimals: Number(import.meta.env.VITE_POT_DECIMALS || 14),
   ss58Format: Number(import.meta.env.VITE_SS58_FORMAT || 42),
+  evmBridge: {
+    sepoliaVault: import.meta.env.VITE_SEPOLIA_BRIDGE_VAULT || "",
+    bnbVault: import.meta.env.VITE_BNB_BRIDGE_VAULT || "",
+    sepoliaRpc: import.meta.env.VITE_SEPOLIA_RPC_URL || "https://ethereum-sepolia-rpc.publicnode.com",
+    bnbRpc: import.meta.env.VITE_BNB_TESTNET_RPC_URL || "https://bsc-testnet.publicnode.com",
+  },
   contracts: {
     tokenFactory: import.meta.env.VITE_POTRA_FACTORY_CONTRACT || "",
     router: import.meta.env.VITE_POTRA_ROUTER_CONTRACT || "",
