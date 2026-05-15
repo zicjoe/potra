@@ -1,0 +1,17 @@
+SETUP
+
+1. Extract to:
+C:\dev\potra
+
+2. Open in VS Code
+
+3. Open Windows PowerShell
+
+4. Run:
+npm install
+
+5. Run:
+npm run dev
+
+6. Open:
+http://localhost:5173
