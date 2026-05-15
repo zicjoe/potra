@@ -4,6 +4,7 @@ import { claimTestPot } from "../blockchain/faucetClient";
 import { getPortaldotApi, readChainInfo, readPotBalance } from "../blockchain/portaldot";
 import { LaunchAssetParams, LaunchAssetResult, launchNativeAsset } from "../blockchain/assets";
 import { CreateLiquidityParams, LiquidityPosition, createLiquidityPosition } from "../blockchain/liquidity";
+import { ExecuteSwapParams, SwapResult, executeManagedSwap } from "../blockchain/swap";
 
 type Account = { address: string; meta?: { name?: string; source?: string } };
 type ChainStatus = "connecting" | "connected" | "offline";
@@ -26,6 +27,8 @@ type PortaldotContextValue = {
   isLaunchingAsset: boolean;
   createLiquidity: (params: Omit<CreateLiquidityParams, "account">) => Promise<LiquidityPosition>;
   isCreatingLiquidity: boolean;
+  executeSwap: (params: Omit<ExecuteSwapParams, "account">) => Promise<SwapResult>;
+  isExecutingSwap: boolean;
 };
 
 const PortaldotContext = createContext<PortaldotContextValue | undefined>(undefined);
@@ -41,6 +44,7 @@ export function PortaldotProvider({ children }: { children: ReactNode }) {
   const [isClaimingFaucet, setIsClaimingFaucet] = useState(false);
   const [isLaunchingAsset, setIsLaunchingAsset] = useState(false);
   const [isCreatingLiquidity, setIsCreatingLiquidity] = useState(false);
+  const [isExecutingSwap, setIsExecutingSwap] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -168,10 +172,35 @@ export function PortaldotProvider({ children }: { children: ReactNode }) {
     }
   }, [refreshBalance, selectedAccount]);
 
+
+
+  const executeSwap = useCallback(async (params: Omit<ExecuteSwapParams, "account">) => {
+    if (!selectedAccount?.address) {
+      throw new Error("Connect a wallet before swapping");
+    }
+
+    setIsExecutingSwap(true);
+    try {
+      const result = await executeManagedSwap({ ...params, account: selectedAccount }, (progress) => {
+        const labels = { inputDeposit: "Depositing input", vaultSettlement: "Settling output", localSync: "Updating pool state" } as const;
+        if (progress.status === "inBlock" || progress.status === "finalized") {
+          toast.success(`${labels[progress.step]} confirmed`, { description: progress.txHash });
+        }
+        if (progress.step === "vaultSettlement" && progress.status === "submitted") {
+          toast.message("Pool vault settlement submitted");
+        }
+      });
+      await refreshBalance();
+      return result;
+    } finally {
+      setIsExecutingSwap(false);
+    }
+  }, [refreshBalance, selectedAccount]);
+
   const value = useMemo<PortaldotContextValue>(() => ({
     status, chainInfo, error, accounts, selectedAccount, potBalance, rawPotBalance,
-    connectWallet, selectAccount, disconnectWallet, refreshBalance, claimFaucet, isClaimingFaucet, launchAsset, isLaunchingAsset, createLiquidity, isCreatingLiquidity,
-  }), [accounts, chainInfo, claimFaucet, connectWallet, createLiquidity, disconnectWallet, error, isClaimingFaucet, isCreatingLiquidity, isLaunchingAsset, launchAsset, potBalance, rawPotBalance, refreshBalance, selectAccount, selectedAccount, status]);
+    connectWallet, selectAccount, disconnectWallet, refreshBalance, claimFaucet, isClaimingFaucet, launchAsset, isLaunchingAsset, createLiquidity, isCreatingLiquidity, executeSwap, isExecutingSwap,
+  }), [accounts, chainInfo, claimFaucet, connectWallet, createLiquidity, disconnectWallet, error, executeSwap, isClaimingFaucet, isCreatingLiquidity, isExecutingSwap, isLaunchingAsset, launchAsset, potBalance, rawPotBalance, refreshBalance, selectAccount, selectedAccount, status]);
 
   return <PortaldotContext.Provider value={value}>{children}</PortaldotContext.Provider>;
 }

@@ -16,7 +16,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { usePortaldot } from "../providers/PortaldotProvider";
 import { getLaunchedAssets, LaunchAssetResult } from "../blockchain/assets";
-import { buildPoolAddress, getLiquidityPositions, LiquidityPosition } from "../blockchain/liquidity";
+import { getManagedPoolAddress, getLiquidityPositions, LiquidityPosition } from "../blockchain/liquidity";
 import { shortAddress } from "../config/env";
 
 function AssetDropdown({
@@ -64,6 +64,7 @@ export function LiquidityPage() {
   const [assetAmount, setAssetAmount] = useState("");
   const [successOpen, setSuccessOpen] = useState(false);
   const [latestPosition, setLatestPosition] = useState<LiquidityPosition | null>(null);
+  const [poolAddress, setPoolAddress] = useState("");
 
   useEffect(() => {
     const refresh = () => {
@@ -82,7 +83,19 @@ export function LiquidityPage() {
     };
   }, []);
 
-  const poolAddress = selectedAsset ? buildPoolAddress(selectedAsset.assetId) : "";
+  useEffect(() => {
+    let mounted = true;
+    if (!selectedAsset) {
+      setPoolAddress("");
+      return;
+    }
+
+    getManagedPoolAddress(selectedAsset.assetId)
+      .then((address) => { if (mounted) setPoolAddress(address); })
+      .catch(() => { if (mounted) setPoolAddress(""); });
+
+    return () => { mounted = false; };
+  }, [selectedAsset]);
 
   const startingPrice = useMemo(() => {
     const pot = Number(potAmount || 0);
@@ -160,7 +173,7 @@ export function LiquidityPage() {
           <CardHeader>
             <CardTitle>Create Liquidity Pool</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Potra creates a deterministic pool vault and funds it with two signed transactions: one POT deposit and one asset deposit.
+              Potra creates a managed pool vault and funds it with two signed transactions: one POT deposit and one asset deposit.
             </p>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -289,7 +302,7 @@ export function LiquidityPage() {
               </div>
               <div className="flex gap-3">
                 <div className="size-7 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-semibold">2</div>
-                <p>Deposit POT and the asset into a deterministic pool vault.</p>
+                <p>Deposit POT and the asset into a managed pool vault.</p>
               </div>
               <div className="flex gap-3">
                 <div className="size-7 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-semibold">3</div>

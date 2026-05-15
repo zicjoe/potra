@@ -1,6 +1,5 @@
 import { web3FromSource } from "@polkadot/extension-dapp";
 import { BN } from "@polkadot/util";
-import { blake2AsU8a, encodeAddress } from "@polkadot/util-crypto";
 import { potraConfig } from "../config/env";
 import { parseUnits } from "./format";
 import { getPortaldotApi } from "./portaldot";
@@ -35,6 +34,7 @@ export type LiquidityPosition = {
   assetTxHash: string;
   createdAt: string;
   status: "funded";
+  mode?: "managed-vault" | "legacy-vault";
 };
 
 const LIQUIDITY_REGISTRY_KEY = "potra.liquidityPositions.v1";
@@ -60,10 +60,19 @@ function normalizeAmount(value: string, decimals: number, label: string) {
   return amount;
 }
 
-export function buildPoolAddress(assetId: number) {
-  const seed = `potra:vault:pot:${assetId}:${potraConfig.chainEnv}`;
-  const publicKey = blake2AsU8a(seed, 256);
-  return encodeAddress(publicKey, potraConfig.ss58Format);
+export async function getManagedPoolAddress(assetId: number) {
+  const response = await fetch(`${potraConfig.faucetApi}/api/pools/${assetId}/address`);
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok || !data.ok || !data.address) {
+    throw new Error(data.error || "Unable to load Potra managed pool address");
+  }
+
+  return String(data.address);
+}
+
+export function isManagedLiquidityPosition(position: LiquidityPosition) {
+  return position.mode === "managed-vault";
 }
 
 async function signAndWait(tx: any, account: WalletAccount, step: LiquidityProgress["step"], onProgress?: (progress: LiquidityProgress) => void) {
@@ -114,7 +123,7 @@ export async function createLiquidityPosition(params: CreateLiquidityParams, onP
   const api = await getPortaldotApi();
   const assetSymbol = params.asset.symbol.trim().toUpperCase();
   const assetId = params.asset.assetId;
-  const poolAddress = buildPoolAddress(assetId);
+  const poolAddress = await getManagedPoolAddress(assetId);
 
   const potAmount = normalizeAmount(params.potAmount, potraConfig.potDecimals, "POT");
   const assetAmount = normalizeAmount(params.assetAmount, params.asset.decimals, assetSymbol);
@@ -139,6 +148,7 @@ export async function createLiquidityPosition(params: CreateLiquidityParams, onP
     assetTxHash,
     createdAt: new Date().toISOString(),
     status: "funded",
+    mode: "managed-vault",
   };
 
   saveLiquidityPosition(position);
@@ -160,4 +170,11 @@ export function saveLiquidityPosition(position: LiquidityPosition) {
   const next = [position, ...existing.filter((item) => item.id !== position.id)].slice(0, 50);
   localStorage.setItem(LIQUIDITY_REGISTRY_KEY, JSON.stringify(next));
   window.dispatchEvent(new CustomEvent("potra:liquidity-created", { detail: position }));
+}
+
+export function updateLiquidityPosition(position: LiquidityPosition) {
+  const existing = getLiquidityPositions();
+  const next = existing.map((item) => item.id === position.id ? position : item);
+  localStorage.setItem(LIQUIDITY_REGISTRY_KEY, JSON.stringify(next));
+  window.dispatchEvent(new CustomEvent("potra:liquidity-updated", { detail: position }));
 }

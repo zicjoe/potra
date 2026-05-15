@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { Droplets, Filter, Rocket } from "lucide-react";
+import { ArrowLeftRight, Droplets, Filter, Rocket } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { getLaunchedAssets } from "../blockchain/assets";
 import { getLiquidityPositions } from "../blockchain/liquidity";
+import { getSwapHistory } from "../blockchain/swap";
 import { shortAddress } from "../config/env";
 
 type Activity = {
-  type: "launch" | "liquidity";
+  type: "launch" | "liquidity" | "swap";
   icon: typeof Rocket;
   user: string;
   action: string;
@@ -21,6 +22,7 @@ type Activity = {
 const typeColors: Record<string, string> = {
   launch: "bg-chart-4/10 border-chart-4/20 text-chart-4",
   liquidity: "bg-success/10 border-success/20 text-success",
+  swap: "bg-primary/10 border-primary/20 text-primary",
 };
 
 function relativeTime(dateString: string) {
@@ -41,10 +43,14 @@ export function ActivityPage() {
     const refresh = () => setTick((value) => value + 1);
     window.addEventListener("potra:asset-launched", refresh);
     window.addEventListener("potra:liquidity-created", refresh);
+    window.addEventListener("potra:liquidity-updated", refresh);
+    window.addEventListener("potra:swap-executed", refresh);
     const timer = window.setInterval(refresh, 60_000);
     return () => {
       window.removeEventListener("potra:asset-launched", refresh);
       window.removeEventListener("potra:liquidity-created", refresh);
+      window.removeEventListener("potra:liquidity-updated", refresh);
+      window.removeEventListener("potra:swap-executed", refresh);
       window.clearInterval(timer);
     };
   }, []);
@@ -71,11 +77,22 @@ export function ActivityPage() {
       txHash: position.assetTxHash,
     }));
 
-    return [...liquidity, ...launches];
+    const swaps = getSwapHistory().map((swap) => ({
+      type: "swap" as const,
+      icon: ArrowLeftRight,
+      user: "Potra",
+      action: `Settled POT/${swap.assetSymbol} swap`,
+      value: `${swap.inputAmount} → ${swap.outputAmount}`,
+      time: relativeTime(swap.createdAt),
+      txHash: swap.outputTxHash,
+    }));
+
+    return [...swaps, ...liquidity, ...launches];
   }, [tick]);
 
   const launches = allActivity.filter((activity) => activity.type === "launch");
   const liquidity = allActivity.filter((activity) => activity.type === "liquidity");
+  const swaps = allActivity.filter((activity) => activity.type === "swap");
 
   return (
     <div className="space-y-6">
@@ -99,8 +116,8 @@ export function ActivityPage() {
           <CardContent><p className="text-3xl font-bold">{launches.length}</p><p className="text-sm text-muted-foreground mt-1">Assets pallet</p></CardContent>
         </Card>
         <Card className="bg-card/50 border-border/50">
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-normal text-muted-foreground">Liquidity Pools</CardTitle></CardHeader>
-          <CardContent><p className="text-3xl font-bold">{liquidity.length}</p><p className="text-sm text-muted-foreground mt-1">Funded pool vaults</p></CardContent>
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-normal text-muted-foreground">Swap Settlements</CardTitle></CardHeader>
+          <CardContent><p className="text-3xl font-bold">{swaps.length}</p><p className="text-sm text-muted-foreground mt-1">Onchain swap settlements</p></CardContent>
         </Card>
       </div>
 
@@ -109,11 +126,13 @@ export function ActivityPage() {
           <TabsTrigger value="all">All Activity<Badge variant="secondary" className="ml-2">{allActivity.length}</Badge></TabsTrigger>
           <TabsTrigger value="launches">Launches<Badge variant="secondary" className="ml-2">{launches.length}</Badge></TabsTrigger>
           <TabsTrigger value="liquidity">Liquidity<Badge variant="secondary" className="ml-2">{liquidity.length}</Badge></TabsTrigger>
+          <TabsTrigger value="swaps">Swaps<Badge variant="secondary" className="ml-2">{swaps.length}</Badge></TabsTrigger>
         </TabsList>
 
         <TabsContent value="all"><ActivityList activities={allActivity} /></TabsContent>
         <TabsContent value="launches"><ActivityList activities={launches} /></TabsContent>
         <TabsContent value="liquidity"><ActivityList activities={liquidity} /></TabsContent>
+        <TabsContent value="swaps"><ActivityList activities={swaps} /></TabsContent>
       </Tabs>
     </div>
   );
