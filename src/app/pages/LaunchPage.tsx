@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router";
 import { CheckCircle2, Copy, ExternalLink, Globe, Loader2, Rocket, Send, ShieldCheck, Twitter, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "../components/ui/button";
@@ -11,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/
 import { Badge } from "../components/ui/badge";
 import { usePortaldot } from "../providers/PortaldotProvider";
 import { DEFAULT_ASSET_DECIMALS, LaunchAssetResult, getLaunchedAssets } from "../blockchain/assets";
-import { potraConfig, shortAddress } from "../config/env";
+import { shortAddress } from "../config/env";
 
 export function LaunchPage() {
   const { selectedAccount, status, launchAsset, isLaunchingAsset, potBalance } = usePortaldot();
@@ -210,7 +211,7 @@ export function LaunchPage() {
                 <Switch checked={withLiquidity} onCheckedChange={setWithLiquidity} disabled={isLaunchingAsset} />
               </div>
               <p className="text-sm text-muted-foreground mt-1">
-                This prepares the launch for the pool contract phase. The token itself is created onchain in this version.
+                After launch, use the Liquidity page to fund a real POT pair for this asset.
               </p>
             </CardHeader>
             {withLiquidity && (
@@ -225,7 +226,7 @@ export function LaunchPage() {
                     disabled={isLaunchingAsset}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Your current POT balance: {potBalance}. The pool contract will consume this in the next contract zip.
+                    Your current POT balance: {potBalance}. Use this as your suggested POT amount when you create the liquidity pool.
                   </p>
                 </div>
 
@@ -241,7 +242,7 @@ export function LaunchPage() {
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">Pool status</span>
-                      <span className="text-warning">Prepared for contract deployment</span>
+                      <span className="text-success">Ready for Liquidity page</span>
                     </div>
                   </div>
                 )}
@@ -358,8 +359,8 @@ export function LaunchPage() {
                 <Button variant="outline" className="gap-2" onClick={copyAssetId}>
                   <Copy className="size-4" /> Copy Asset ID
                 </Button>
-                <Button variant="outline" className="gap-2" onClick={() => potraConfig.explorerUrl && window.open(potraConfig.explorerUrl, "_blank")}>
-                  <ExternalLink className="size-4" /> Open Explorer
+                <Button asChild className="gap-2 bg-gradient-to-r from-primary to-chart-2">
+                  <Link to="/app/liquidity"><ExternalLink className="size-4" /> Create Liquidity</Link>
                 </Button>
               </div>
             </div>

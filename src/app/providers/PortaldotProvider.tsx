@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { claimTestPot } from "../blockchain/faucetClient";
 import { getPortaldotApi, readChainInfo, readPotBalance } from "../blockchain/portaldot";
 import { LaunchAssetParams, LaunchAssetResult, launchNativeAsset } from "../blockchain/assets";
+import { CreateLiquidityParams, LiquidityPosition, createLiquidityPosition } from "../blockchain/liquidity";
 
 type Account = { address: string; meta?: { name?: string; source?: string } };
 type ChainStatus = "connecting" | "connected" | "offline";
@@ -23,6 +24,8 @@ type PortaldotContextValue = {
   isClaimingFaucet: boolean;
   launchAsset: (params: Omit<LaunchAssetParams, "account">) => Promise<LaunchAssetResult>;
   isLaunchingAsset: boolean;
+  createLiquidity: (params: Omit<CreateLiquidityParams, "account">) => Promise<LiquidityPosition>;
+  isCreatingLiquidity: boolean;
 };
 
 const PortaldotContext = createContext<PortaldotContextValue | undefined>(undefined);
@@ -37,6 +40,7 @@ export function PortaldotProvider({ children }: { children: ReactNode }) {
   const [rawPotBalance, setRawPotBalance] = useState("0");
   const [isClaimingFaucet, setIsClaimingFaucet] = useState(false);
   const [isLaunchingAsset, setIsLaunchingAsset] = useState(false);
+  const [isCreatingLiquidity, setIsCreatingLiquidity] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -142,10 +146,32 @@ export function PortaldotProvider({ children }: { children: ReactNode }) {
     }
   }, [refreshBalance, selectedAccount]);
 
+
+
+  const createLiquidity = useCallback(async (params: Omit<CreateLiquidityParams, "account">) => {
+    if (!selectedAccount?.address) {
+      throw new Error("Connect a wallet before creating a liquidity pool");
+    }
+
+    setIsCreatingLiquidity(true);
+    try {
+      const position = await createLiquidityPosition({ ...params, account: selectedAccount }, (progress) => {
+        const labels = { potDeposit: "Depositing POT", assetDeposit: "Depositing asset" } as const;
+        if (progress.status === "inBlock") {
+          toast.success(`${labels[progress.step]} confirmed`, { description: progress.txHash });
+        }
+      });
+      await refreshBalance();
+      return position;
+    } finally {
+      setIsCreatingLiquidity(false);
+    }
+  }, [refreshBalance, selectedAccount]);
+
   const value = useMemo<PortaldotContextValue>(() => ({
     status, chainInfo, error, accounts, selectedAccount, potBalance, rawPotBalance,
-    connectWallet, selectAccount, disconnectWallet, refreshBalance, claimFaucet, isClaimingFaucet, launchAsset, isLaunchingAsset,
-  }), [accounts, chainInfo, claimFaucet, connectWallet, disconnectWallet, error, isClaimingFaucet, isLaunchingAsset, launchAsset, potBalance, rawPotBalance, refreshBalance, selectAccount, selectedAccount, status]);
+    connectWallet, selectAccount, disconnectWallet, refreshBalance, claimFaucet, isClaimingFaucet, launchAsset, isLaunchingAsset, createLiquidity, isCreatingLiquidity,
+  }), [accounts, chainInfo, claimFaucet, connectWallet, createLiquidity, disconnectWallet, error, isClaimingFaucet, isCreatingLiquidity, isLaunchingAsset, launchAsset, potBalance, rawPotBalance, refreshBalance, selectAccount, selectedAccount, status]);
 
   return <PortaldotContext.Provider value={value}>{children}</PortaldotContext.Provider>;
 }

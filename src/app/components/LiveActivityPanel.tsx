@@ -1,30 +1,81 @@
-import { ArrowLeftRight, GitBranch, Rocket, TrendingUp } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ArrowLeftRight, Droplets, GitBranch, Rocket } from "lucide-react";
 import { ScrollArea } from "./ui/scroll-area";
+import { getLaunchedAssets } from "../blockchain/assets";
+import { getLiquidityPositions } from "../blockchain/liquidity";
+import { shortAddress } from "../config/env";
 
-const activities = [
-  { type: "swap", user: "0x742d...9a3f", action: "Swapped 50 POT for 12.5 TESTUSDT", time: "2m ago", icon: ArrowLeftRight },
-  { type: "launch", user: "0x8b5c...3e2a", action: "Launched $MOON token", time: "5m ago", icon: Rocket },
-  { type: "bridge", user: "0x3a1b...7c4d", action: "Bridged 100 USDT from Sepolia", time: "8m ago", icon: GitBranch },
-  { type: "swap", user: "0x9e2f...1d5b", action: "Swapped 200 POT for 0.05 ETH", time: "12m ago", icon: ArrowLeftRight },
-  { type: "liquidity", user: "0x4d7a...8f9c", action: "Added liquidity to POT/USDT", time: "15m ago", icon: TrendingUp },
-  { type: "launch", user: "0x6c3e...2b1a", action: "Launched $STAR token", time: "18m ago", icon: Rocket },
-  { type: "swap", user: "0x1f8d...4a9e", action: "Swapped 25 TESTUSDT for 100 POT", time: "22m ago", icon: ArrowLeftRight },
-  { type: "bridge", user: "0x5b2c...3d7f", action: "Bridged 50 POT to BNB Testnet", time: "25m ago", icon: GitBranch },
-];
+type ActivityItem = {
+  type: "launch" | "liquidity" | "bridge" | "swap";
+  user: string;
+  action: string;
+  time: string;
+  icon: typeof Rocket;
+};
+
+function relativeTime(dateString: string) {
+  const diff = Date.now() - new Date(dateString).getTime();
+  const minutes = Math.max(0, Math.floor(diff / 60_000));
+  if (minutes < 1) return "now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
 
 export function LiveActivityPanel() {
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    const refresh = () => setTick((value) => value + 1);
+    window.addEventListener("potra:asset-launched", refresh);
+    window.addEventListener("potra:liquidity-created", refresh);
+    const timer = window.setInterval(refresh, 60_000);
+    return () => {
+      window.removeEventListener("potra:asset-launched", refresh);
+      window.removeEventListener("potra:liquidity-created", refresh);
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  const activities = useMemo<ActivityItem[]>(() => {
+    void tick;
+    const launches = getLaunchedAssets().map((asset) => ({
+      type: "launch" as const,
+      user: shortAddress(asset.owner),
+      action: `Launched ${asset.symbol} on Portaldot`,
+      time: relativeTime(asset.launchedAt),
+      icon: Rocket,
+    }));
+
+    const liquidity = getLiquidityPositions().map((position) => ({
+      type: "liquidity" as const,
+      user: shortAddress(position.owner),
+      action: `Funded POT/${position.assetSymbol} liquidity`,
+      time: relativeTime(position.createdAt),
+      icon: Droplets,
+    }));
+
+    return [...liquidity, ...launches].slice(0, 12);
+  }, [tick]);
+
   return (
     <aside className="w-80 border-l border-border bg-card/30 backdrop-blur-sm flex flex-col">
       <div className="p-4 border-b border-border">
         <h3 className="font-semibold">Live Activity</h3>
-        <p className="text-xs text-muted-foreground mt-1">Real-time ecosystem events</p>
+        <p className="text-xs text-muted-foreground mt-1">Local Portaldot activity from this workspace</p>
       </div>
 
       <ScrollArea className="flex-1">
         <div className="p-3 space-y-2">
-          {activities.map((activity, i) => (
+          {activities.length === 0 ? (
+            <div className="p-4 rounded-lg bg-card/80 border border-border/50 text-sm text-muted-foreground">
+              Launch a token or fund liquidity to create the first recorded Potra activity.
+            </div>
+          ) : activities.map((activity, i) => (
             <div
-              key={i}
+              key={`${activity.type}-${i}`}
               className="p-3 rounded-lg bg-card/80 border border-border/50 hover:border-border transition-colors"
             >
               <div className="flex items-start gap-3">

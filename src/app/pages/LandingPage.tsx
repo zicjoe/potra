@@ -3,50 +3,50 @@ import { ArrowRight, TrendingUp, Shield, Zap, ArrowLeftRight, GitBranch, Rocket 
 import { Button } from "../components/ui/button";
 
 const stats = [
-  { label: "Total Value Locked", value: "$4.2M" },
-  { label: "24h Volume", value: "$892K" },
-  { label: "Total Transactions", value: "128K" },
-  { label: "Active Users", value: "12.4K" },
+  { label: "Native token", value: "POT" },
+  { label: "Environment", value: "Local" },
+  { label: "Launch flow", value: "Onchain" },
+  { label: "Liquidity", value: "Vaults" },
 ];
 
 const features = [
   {
     icon: ArrowLeftRight,
     title: "Instant Swaps",
-    description: "Trade tokens with minimal slippage and lightning-fast execution on Portaldot."
+    description: "Preview trades against funded Portaldot pool vaults before AMM execution is deployed."
   },
   {
     icon: GitBranch,
     title: "Cross-Chain Bridge",
-    description: "Seamlessly bridge assets from Ethereum, BNB Chain, and other major networks."
+    description: "Prepare testnet asset movement into Portaldot through a gateway-style bridge flow."
   },
   {
     icon: Rocket,
     title: "Token Launchpad",
-    description: "Launch your own tokens with built-in liquidity seeding and fair distribution."
+    description: "Create Portaldot-native assets through real Assets pallet extrinsics."
   },
   {
     icon: Shield,
     title: "Secure & Audited",
-    description: "Battle-tested smart contracts with multiple security audits and on-chain guarantees."
+    description: "Every active launch and liquidity action is backed by signed local-chain transactions."
   },
   {
     icon: Zap,
     title: "Instant Finality",
-    description: "Leverage Portaldot's high-speed consensus for sub-second transaction confirmation."
+    description: "Connect directly to a local Portaldot node and verify execution through real chain state."
   },
   {
     icon: TrendingUp,
     title: "Deep Liquidity",
-    description: "Access optimized routing and aggregated liquidity across the Portaldot ecosystem."
+    description: "Fund deterministic POT liquidity vaults for newly launched assets."
   },
 ];
 
 const recentActivity = [
-  { type: "swap", text: "50 POT → 12.5 TESTUSDT", time: "2m ago" },
-  { type: "launch", text: "$MOON token launched", time: "5m ago" },
-  { type: "bridge", text: "100 USDT bridged from Sepolia", time: "8m ago" },
-  { type: "swap", text: "200 POT → 0.05 ETH", time: "12m ago" },
+  { type: "launch", text: "Create a Portaldot-native asset", time: "Step 1" },
+  { type: "liquidity", text: "Fund a POT liquidity vault", time: "Step 2" },
+  { type: "swap", text: "Preview swaps from funded pools", time: "Step 3" },
+  { type: "bridge", text: "Prepare the asset gateway", time: "Step 4" },
 ];
 
 export function LandingPage() {
@@ -82,7 +82,7 @@ export function LandingPage() {
               Launch, bridge, and trade on Portaldot.
             </h1>
             <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-              The gateway to the Portaldot economy. Swap tokens, bridge assets, and launch projects with institutional-grade infrastructure.
+              The gateway to the Portaldot economy. Launch native assets, fund liquidity, preview swaps, and prepare bridge flows through a production-grade testnet experience.
             </p>
             <div className="flex items-center justify-center gap-4">
               <Link to="/app">
@@ -121,7 +121,7 @@ export function LandingPage() {
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold mb-4">Everything you need to build on Portaldot</h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Comprehensive DeFi infrastructure for traders, builders, and communities.
+              A focused launch and liquidity workspace for builders testing real Portaldot execution.
             </p>
           </div>
 
@@ -146,9 +146,9 @@ export function LandingPage() {
         <div className="container mx-auto px-6">
           <div className="max-w-4xl mx-auto">
             <div className="text-center mb-12">
-              <h2 className="text-4xl font-bold mb-4">Live Ecosystem Activity</h2>
+              <h2 className="text-4xl font-bold mb-4">Product Flow</h2>
               <p className="text-lg text-muted-foreground">
-                Real-time transactions happening on Potra right now
+                The first working loop inside Potra
               </p>
             </div>
 
@@ -172,7 +172,7 @@ export function LandingPage() {
             <div className="text-center mt-8">
               <Link to="/app/activity">
                 <Button variant="outline" className="gap-2">
-                  View All Activity
+                  Open Activity
                   <ArrowRight className="size-4" />
                 </Button>
               </Link>
