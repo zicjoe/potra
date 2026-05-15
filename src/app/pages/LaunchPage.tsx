@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { Rocket, Upload, Plus, Twitter, Globe, Send } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { CheckCircle2, Copy, ExternalLink, Globe, Loader2, Rocket, Send, ShieldCheck, Twitter, Upload } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
@@ -7,41 +8,110 @@ import { Label } from "../components/ui/label";
 import { Textarea } from "../components/ui/textarea";
 import { Switch } from "../components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
-
-const recentLaunches = [
-  { symbol: "MOON", name: "Moon Token", supply: "1,000,000", liquidity: "$12.5K", time: "2h ago" },
-  { symbol: "STAR", name: "Star Token", supply: "500,000", liquidity: "$8.2K", time: "5h ago" },
-  { symbol: "GEMS", name: "Gems Token", supply: "2,000,000", liquidity: "$24.8K", time: "1d ago" },
-];
+import { Badge } from "../components/ui/badge";
+import { usePortaldot } from "../providers/PortaldotProvider";
+import { DEFAULT_ASSET_DECIMALS, LaunchAssetResult, getLaunchedAssets } from "../blockchain/assets";
+import { potraConfig, shortAddress } from "../config/env";
 
 export function LaunchPage() {
+  const { selectedAccount, status, launchAsset, isLaunchingAsset, potBalance } = usePortaldot();
   const [tokenName, setTokenName] = useState("");
   const [tokenSymbol, setTokenSymbol] = useState("");
   const [totalSupply, setTotalSupply] = useState("");
   const [description, setDescription] = useState("");
+  const [twitter, setTwitter] = useState("");
+  const [website, setWebsite] = useState("");
+  const [telegram, setTelegram] = useState("");
   const [withLiquidity, setWithLiquidity] = useState(true);
   const [liquidityAmount, setLiquidityAmount] = useState("");
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [launchedAsset, setLaunchedAsset] = useState<LaunchAssetResult | null>(null);
+  const [recentLaunches, setRecentLaunches] = useState<LaunchAssetResult[]>([]);
 
-  const handleLaunch = () => {
-    setShowSuccessModal(true);
-    setTimeout(() => {
-      setShowSuccessModal(false);
-      setTokenName("");
-      setTokenSymbol("");
-      setTotalSupply("");
-      setDescription("");
-      setLiquidityAmount("");
-    }, 3000);
+  useEffect(() => {
+    setRecentLaunches(getLaunchedAssets());
+    const handler = () => setRecentLaunches(getLaunchedAssets());
+    window.addEventListener("potra:asset-launched", handler);
+    return () => window.removeEventListener("potra:asset-launched", handler);
+  }, []);
+
+  const liquidityTokenAmount = useMemo(() => {
+    const supply = Number(totalSupply || 0);
+    if (!Number.isFinite(supply) || supply <= 0) return "0";
+    return Math.max(supply * 0.01, 1).toLocaleString(undefined, { maximumFractionDigits: 4 });
+  }, [totalSupply]);
+
+  const startingPrice = useMemo(() => {
+    const pot = Number(liquidityAmount || 0);
+    const supply = Number(totalSupply || 0) * 0.01;
+    if (!pot || !supply) return "—";
+    return (pot / supply).toFixed(8);
+  }, [liquidityAmount, totalSupply]);
+
+  const canLaunch = Boolean(
+    selectedAccount &&
+    status === "connected" &&
+    tokenName.trim() &&
+    tokenSymbol.trim() &&
+    Number(totalSupply) > 0,
+  );
+
+  const resetForm = () => {
+    setTokenName("");
+    setTokenSymbol("");
+    setTotalSupply("");
+    setDescription("");
+    setTwitter("");
+    setWebsite("");
+    setTelegram("");
+    setLiquidityAmount("");
   };
 
-  const canLaunch = tokenName && tokenSymbol && totalSupply && (!withLiquidity || liquidityAmount);
+  const handleLaunch = async () => {
+    if (!canLaunch) {
+      toast.error(selectedAccount ? "Complete the required token fields" : "Connect your wallet first");
+      return;
+    }
+
+    try {
+      const result = await launchAsset({
+        name: tokenName,
+        symbol: tokenSymbol,
+        totalSupply,
+        description,
+        website,
+        twitter,
+        telegram,
+        decimals: DEFAULT_ASSET_DECIMALS,
+      });
+      setLaunchedAsset(result);
+      setShowSuccessModal(true);
+      setRecentLaunches(getLaunchedAssets());
+      resetForm();
+      toast.success(`${result.symbol} launched on Portaldot`, { description: `Asset ID ${result.assetId}` });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Token launch failed");
+    }
+  };
+
+  const copyAssetId = async () => {
+    if (!launchedAsset) return;
+    await navigator.clipboard.writeText(String(launchedAsset.assetId));
+    toast.success("Asset ID copied");
+  };
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Launch Token</h1>
-        <p className="text-muted-foreground mt-1">Create and deploy your token on Portaldot</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold">Launch Token</h1>
+          <p className="text-muted-foreground mt-1">
+            Create a real Portaldot-native asset through the Assets pallet.
+          </p>
+        </div>
+        <Badge variant="outline" className="gap-2 border-success/30 bg-success/10 text-success">
+          <ShieldCheck className="size-4" /> Real onchain launch
+        </Badge>
       </div>
 
       <div className="grid grid-cols-3 gap-6">
@@ -56,9 +126,10 @@ export function LaunchPage() {
                   <Label htmlFor="tokenName">Token Name</Label>
                   <Input
                     id="tokenName"
-                    placeholder="e.g., Moon Token"
+                    placeholder="e.g., Game Credit"
                     value={tokenName}
-                    onChange={(e) => setTokenName(e.target.value)}
+                    onChange={(event) => setTokenName(event.target.value)}
+                    disabled={isLaunchingAsset}
                   />
                 </div>
 
@@ -66,9 +137,11 @@ export function LaunchPage() {
                   <Label htmlFor="tokenSymbol">Token Symbol</Label>
                   <Input
                     id="tokenSymbol"
-                    placeholder="e.g., MOON"
+                    placeholder="e.g., GAME"
                     value={tokenSymbol}
-                    onChange={(e) => setTokenSymbol(e.target.value.toUpperCase())}
+                    maxLength={12}
+                    onChange={(event) => setTokenSymbol(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
+                    disabled={isLaunchingAsset}
                   />
                 </div>
               </div>
@@ -78,53 +151,52 @@ export function LaunchPage() {
                 <Input
                   id="totalSupply"
                   type="number"
+                  min="1"
                   placeholder="1000000"
                   value={totalSupply}
-                  onChange={(e) => setTotalSupply(e.target.value)}
+                  onChange={(event) => setTotalSupply(event.target.value)}
+                  disabled={isLaunchingAsset}
                 />
-                <p className="text-xs text-muted-foreground">Initial token supply to mint</p>
+                <p className="text-xs text-muted-foreground">
+                  The supply is minted to your connected wallet after the asset is created.
+                </p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="description">Description (Optional)</Label>
+                <Label htmlFor="description">Description</Label>
                 <Textarea
                   id="description"
-                  placeholder="Describe your token and its purpose..."
+                  placeholder="Describe what this asset is used for inside the Portaldot economy..."
                   rows={3}
                   value={description}
-                  onChange={(e) => setDescription(e.target.value)}
+                  onChange={(event) => setDescription(event.target.value)}
+                  disabled={isLaunchingAsset}
                 />
               </div>
 
               <div className="space-y-4">
-                <Label>Token Logo (Optional)</Label>
+                <Label>Token Logo</Label>
                 <div className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-primary/50 transition-colors cursor-pointer">
                   <Upload className="size-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">Click to upload or drag and drop</p>
-                  <p className="text-xs text-muted-foreground mt-1">PNG, JPG or SVG (max. 2MB)</p>
+                  <p className="text-sm text-muted-foreground">Logo upload will be stored as metadata in the next metadata service pass.</p>
+                  <p className="text-xs text-muted-foreground mt-1">For this onchain pass, the asset itself launches first.</p>
                 </div>
               </div>
 
               <div className="space-y-4">
-                <Label>Social Links (Optional)</Label>
+                <Label>Social Links</Label>
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
-                    <div className="size-10 rounded-lg bg-muted/50 flex items-center justify-center">
-                      <Twitter className="size-4" />
-                    </div>
-                    <Input placeholder="https://twitter.com/yourtoken" />
+                    <div className="size-10 rounded-lg bg-muted/50 flex items-center justify-center"><Twitter className="size-4" /></div>
+                    <Input placeholder="https://x.com/yourtoken" value={twitter} onChange={(event) => setTwitter(event.target.value)} disabled={isLaunchingAsset} />
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="size-10 rounded-lg bg-muted/50 flex items-center justify-center">
-                      <Globe className="size-4" />
-                    </div>
-                    <Input placeholder="https://yourtoken.com" />
+                    <div className="size-10 rounded-lg bg-muted/50 flex items-center justify-center"><Globe className="size-4" /></div>
+                    <Input placeholder="https://yourtoken.com" value={website} onChange={(event) => setWebsite(event.target.value)} disabled={isLaunchingAsset} />
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="size-10 rounded-lg bg-muted/50 flex items-center justify-center">
-                      <Send className="size-4" />
-                    </div>
-                    <Input placeholder="https://t.me/yourtoken" />
+                    <div className="size-10 rounded-lg bg-muted/50 flex items-center justify-center"><Send className="size-4" /></div>
+                    <Input placeholder="https://t.me/yourtoken" value={telegram} onChange={(event) => setTelegram(event.target.value)} disabled={isLaunchingAsset} />
                   </div>
                 </div>
               </div>
@@ -134,11 +206,11 @@ export function LaunchPage() {
           <Card className="bg-card/50 border-border/50">
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>Initial Liquidity</CardTitle>
-                <Switch checked={withLiquidity} onCheckedChange={setWithLiquidity} />
+                <CardTitle>Initial Liquidity Plan</CardTitle>
+                <Switch checked={withLiquidity} onCheckedChange={setWithLiquidity} disabled={isLaunchingAsset} />
               </div>
               <p className="text-sm text-muted-foreground mt-1">
-                Seed initial liquidity to enable trading immediately after launch
+                This prepares the launch for the pool contract phase. The token itself is created onchain in this version.
               </p>
             </CardHeader>
             {withLiquidity && (
@@ -149,26 +221,27 @@ export function LaunchPage() {
                     type="number"
                     placeholder="100"
                     value={liquidityAmount}
-                    onChange={(e) => setLiquidityAmount(e.target.value)}
+                    onChange={(event) => setLiquidityAmount(event.target.value)}
+                    disabled={isLaunchingAsset}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Amount of POT to pair with 1% of token supply
+                    Your current POT balance: {potBalance}. The pool contract will consume this in the next contract zip.
                   </p>
                 </div>
 
                 {liquidityAmount && totalSupply && (
                   <div className="p-4 rounded-lg bg-muted/30 space-y-2 text-sm">
                     <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Liquidity Pool</span>
-                      <span className="font-medium">{liquidityAmount} POT + {parseInt(totalSupply) * 0.01} {tokenSymbol}</span>
+                      <span className="text-muted-foreground">Planned Pool</span>
+                      <span className="font-medium">{liquidityAmount} POT + {liquidityTokenAmount} {tokenSymbol || "TOKEN"}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">Starting Price</span>
-                      <span>1 {tokenSymbol} ≈ {(parseFloat(liquidityAmount) / (parseInt(totalSupply) * 0.01)).toFixed(6)} POT</span>
+                      <span>1 {tokenSymbol || "TOKEN"} ≈ {startingPrice} POT</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Your LP Tokens</span>
-                      <span>100%</span>
+                      <span className="text-muted-foreground">Pool status</span>
+                      <span className="text-warning">Prepared for contract deployment</span>
                     </div>
                   </div>
                 )}
@@ -179,11 +252,11 @@ export function LaunchPage() {
           <Button
             className="w-full gap-2 bg-gradient-to-r from-primary to-chart-2 hover:opacity-90"
             size="lg"
-            disabled={!canLaunch}
+            disabled={!canLaunch || isLaunchingAsset}
             onClick={handleLaunch}
           >
-            <Rocket className="size-4" />
-            {withLiquidity ? `Launch Token with ${liquidityAmount} POT Liquidity` : "Launch Token"}
+            {isLaunchingAsset ? <Loader2 className="size-4 animate-spin" /> : <Rocket className="size-4" />}
+            {isLaunchingAsset ? "Launching on Portaldot..." : "Launch Token Onchain"}
           </Button>
         </div>
 
@@ -194,11 +267,7 @@ export function LaunchPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="size-16 rounded-xl bg-card border border-border flex items-center justify-center mx-auto">
-                {tokenSymbol ? (
-                  <span className="text-2xl font-bold">{tokenSymbol.slice(0, 2)}</span>
-                ) : (
-                  <Upload className="size-8 text-muted-foreground" />
-                )}
+                {tokenSymbol ? <span className="text-2xl font-bold">{tokenSymbol.slice(0, 2)}</span> : <Upload className="size-8 text-muted-foreground" />}
               </div>
 
               <div className="text-center">
@@ -207,99 +276,94 @@ export function LaunchPage() {
               </div>
 
               <div className="p-3 rounded-lg bg-card/50 space-y-2 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Total Supply</span>
-                  <span className="font-medium">{totalSupply ? parseInt(totalSupply).toLocaleString() : "—"}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Network</span>
-                  <span className="font-medium">Portaldot</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">With Liquidity</span>
-                  <span className="font-medium">{withLiquidity ? "Yes" : "No"}</span>
-                </div>
+                <div className="flex items-center justify-between"><span className="text-muted-foreground">Total Supply</span><span className="font-medium">{totalSupply ? Number(totalSupply).toLocaleString() : "—"}</span></div>
+                <div className="flex items-center justify-between"><span className="text-muted-foreground">Network</span><span className="font-medium">Portaldot Local</span></div>
+                <div className="flex items-center justify-between"><span className="text-muted-foreground">Wallet</span><span className="font-medium">{selectedAccount ? shortAddress(selectedAccount.address) : "Not connected"}</span></div>
+                <div className="flex items-center justify-between"><span className="text-muted-foreground">Pallet</span><span className="font-medium">Assets</span></div>
               </div>
 
-              {description && (
-                <div className="p-3 rounded-lg bg-card/50">
-                  <p className="text-xs text-muted-foreground">{description}</p>
-                </div>
-              )}
+              <div className="p-3 rounded-lg border border-border/50 bg-muted/20 text-xs text-muted-foreground leading-relaxed">
+                Launch sequence: create asset, set metadata, mint supply. Your wallet signs each real extrinsic.
+              </div>
             </CardContent>
           </Card>
 
           <Card className="bg-card/50 border-border/50">
             <CardHeader>
-              <CardTitle>Recent Launches</CardTitle>
+              <CardTitle>Recent Onchain Launches</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {recentLaunches.map((launch) => (
-                  <div key={launch.symbol} className="p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="size-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
-                        <span className="text-xs font-semibold">{launch.symbol.slice(0, 2)}</span>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">{launch.symbol}</p>
-                        <p className="text-xs text-muted-foreground">{launch.name}</p>
-                      </div>
+            <CardContent className="space-y-3">
+              {recentLaunches.length === 0 ? (
+                <div className="p-4 rounded-lg bg-muted/20 text-sm text-muted-foreground">
+                  No token launches recorded on this browser yet.
+                </div>
+              ) : recentLaunches.slice(0, 5).map((launch) => (
+                <div key={launch.assetId} className="p-3 rounded-lg bg-muted/30 border border-border/40">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">{launch.symbol}</p>
+                      <p className="text-xs text-muted-foreground">{launch.name}</p>
                     </div>
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>Supply: {launch.supply}</span>
-                      <span>{launch.time}</span>
-                    </div>
+                    <Badge variant="outline">#{launch.assetId}</Badge>
                   </div>
-                ))}
-              </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                    <span>Supply: {Number(launch.totalSupply).toLocaleString()}</span>
+                    <span>Owner: {shortAddress(launch.owner)}</span>
+                  </div>
+                </div>
+              ))}
             </CardContent>
           </Card>
         </div>
       </div>
 
       <Dialog open={showSuccessModal} onOpenChange={setShowSuccessModal}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-3">
               <div className="size-12 rounded-full bg-success/10 border border-success/20 flex items-center justify-center">
-                <Rocket className="size-6 text-success" />
+                <CheckCircle2 className="size-6 text-success" />
               </div>
+              Token launched on Portaldot
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="text-center">
-              <h3 className="text-2xl font-bold mb-2">Token Launched Successfully!</h3>
-              <p className="text-muted-foreground mb-4">
-                {tokenSymbol} has been deployed to Portaldot Testnet
-              </p>
-            </div>
 
-            <div className="p-4 rounded-lg bg-muted/30 space-y-2 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Token</span>
-                <span className="font-medium">{tokenSymbol}</span>
+          {launchedAsset && (
+            <div className="space-y-4 py-4">
+              <div className="text-center">
+                <h3 className="text-2xl font-bold mb-2">{launchedAsset.symbol} is live</h3>
+                <p className="text-muted-foreground">
+                  Asset #{launchedAsset.assetId} was created, configured, and minted on the local Portaldot chain.
+                </p>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Supply</span>
-                <span className="font-medium">{parseInt(totalSupply).toLocaleString()}</span>
+
+              <div className="p-4 rounded-lg bg-muted/30 space-y-2 text-sm">
+                <div className="flex items-center justify-between"><span className="text-muted-foreground">Name</span><span className="font-medium">{launchedAsset.name}</span></div>
+                <div className="flex items-center justify-between"><span className="text-muted-foreground">Symbol</span><span className="font-medium">{launchedAsset.symbol}</span></div>
+                <div className="flex items-center justify-between"><span className="text-muted-foreground">Asset ID</span><span className="font-mono text-xs">{launchedAsset.assetId}</span></div>
+                <div className="flex items-center justify-between"><span className="text-muted-foreground">Owner</span><span className="font-mono text-xs">{shortAddress(launchedAsset.owner)}</span></div>
+                <div className="flex items-center justify-between"><span className="text-muted-foreground">Tx count</span><span>{launchedAsset.txHashes.length}</span></div>
               </div>
-              {withLiquidity && (
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Initial Liquidity</span>
-                  <span className="font-medium">{liquidityAmount} POT</span>
-                </div>
-              )}
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Contract</span>
-                <span className="font-mono text-xs">0x7a2d...8f3c</span>
+
+              <div className="space-y-2">
+                {launchedAsset.txHashes.map((hash, index) => (
+                  <div key={`${hash}-${index}`} className="flex items-center justify-between gap-3 rounded-lg bg-card/70 border border-border/50 px-3 py-2 text-xs">
+                    <span className="text-muted-foreground">Tx {index + 1}</span>
+                    <span className="font-mono truncate">{hash}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <Button variant="outline" className="gap-2" onClick={copyAssetId}>
+                  <Copy className="size-4" /> Copy Asset ID
+                </Button>
+                <Button variant="outline" className="gap-2" onClick={() => potraConfig.explorerUrl && window.open(potraConfig.explorerUrl, "_blank")}>
+                  <ExternalLink className="size-4" /> Open Explorer
+                </Button>
               </div>
             </div>
-
-            <Button className="w-full" variant="outline">
-              View on Explorer
-            </Button>
-          </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
