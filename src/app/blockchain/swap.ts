@@ -3,6 +3,7 @@ import { BN } from "@polkadot/util";
 import { potraConfig } from "../config/env";
 import { parseUnits } from "./format";
 import { getPortaldotApi } from "./portaldot";
+import { humanizeTxError } from "./txErrors";
 import type { WalletAccount } from "./assets";
 import type { LiquidityPosition } from "./liquidity";
 import { updateLiquidityPosition } from "./liquidity";
@@ -113,7 +114,7 @@ async function signAndWait(tx: any, account: WalletAccount, onProgress?: (progre
     let unsub: undefined | (() => void);
     let resolved = false;
 
-    tx.signAndSend(account.address, { signer: injector.signer }, (result: any) => {
+    tx.signAndSend(account.address, { signer: injector.signer, nonce: -1 }, (result: any) => {
       const txHash = tx.hash?.toString?.() || result.txHash?.toString?.();
 
       if (result.status?.isBroadcast) onProgress?.({ step: "inputDeposit", status: "broadcast", txHash });
@@ -123,7 +124,7 @@ async function signAndWait(tx: any, account: WalletAccount, onProgress?: (progre
         const failure = result.dispatchError;
         if (failure) {
           unsub?.();
-          reject(new Error(failure.toString()));
+          reject(humanizeTxError(failure.toString()));
           return;
         }
 
@@ -137,7 +138,7 @@ async function signAndWait(tx: any, account: WalletAccount, onProgress?: (progre
     }).then((cleanup: () => void) => {
       unsub = cleanup;
       onProgress?.({ step: "inputDeposit", status: "signing" });
-    }).catch(reject);
+    }).catch((error: unknown) => reject(humanizeTxError(error)));
   });
 }
 

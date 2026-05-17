@@ -13,7 +13,7 @@ const features = [
   {
     icon: ArrowLeftRight,
     title: "Instant Swaps",
-    description: "Preview trades against funded Portaldot pool vaults before AMM execution is deployed."
+    description: "Trade through protocol-seeded Portaldot markets or user-created pools with real onchain settlement."
   },
   {
     icon: GitBranch,
@@ -38,14 +38,14 @@ const features = [
   {
     icon: TrendingUp,
     title: "Deep Liquidity",
-    description: "Fund deterministic POT liquidity vaults for newly launched assets."
+    description: "Create liquidity for launched assets or supported bridge assets without starting from a blank market."
   },
 ];
 
 const recentActivity = [
   { type: "launch", text: "Create a Portaldot-native asset", time: "Step 1" },
-  { type: "liquidity", text: "Fund a POT liquidity vault", time: "Step 2" },
-  { type: "swap", text: "Preview swaps from funded pools", time: "Step 3" },
+  { type: "liquidity", text: "Add liquidity or use seeded markets", time: "Step 2" },
+  { type: "swap", text: "Swap through active Potra markets", time: "Step 3" },
   { type: "bridge", text: "Prepare the asset gateway", time: "Step 4" },
 ];
 
@@ -64,7 +64,7 @@ export function LandingPage() {
           </div>
 
           <div className="flex items-center gap-4">
-            <Link to="/app">
+            <Link to="/app/swap">
               <Button className="gap-2 bg-gradient-to-r from-primary to-chart-2 hover:opacity-90">
                 Launch App
                 <ArrowRight className="size-4" />
@@ -82,10 +82,10 @@ export function LandingPage() {
               Launch, bridge, and trade on Portaldot.
             </h1>
             <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-              The gateway to the Portaldot economy. Launch native assets, fund liquidity, preview swaps, and prepare bridge flows through a production-grade testnet experience.
+              The gateway to the Portaldot economy. Launch native assets, add liquidity, execute swaps, and bridge testnet assets through a production-grade Portaldot experience.
             </p>
             <div className="flex items-center justify-center gap-4">
-              <Link to="/app">
+              <Link to="/app/swap">
                 <Button size="lg" className="gap-2 bg-gradient-to-r from-primary to-chart-2 hover:opacity-90">
                   Launch App
                   <ArrowRight className="size-4" />

@@ -2,6 +2,7 @@ import { web3FromSource } from "@polkadot/extension-dapp";
 import { BN } from "@polkadot/util";
 import { potraConfig } from "../config/env";
 import { getPortaldotApi } from "./portaldot";
+import { humanizeTxError } from "./txErrors";
 
 export type WalletAccount = {
   address: string;
@@ -87,7 +88,7 @@ async function signAndWait(tx: any, account: WalletAccount, step: TxProgress["st
     let unsub: undefined | (() => void);
     let resolved = false;
 
-    tx.signAndSend(account.address, { signer: injector.signer }, (result: any) => {
+    tx.signAndSend(account.address, { signer: injector.signer, nonce: -1 }, (result: any) => {
       const txHash = tx.hash?.toString?.() || result.txHash?.toString?.();
 
       if (result.status?.isBroadcast) {
@@ -111,7 +112,7 @@ async function signAndWait(tx: any, account: WalletAccount, step: TxProgress["st
             }
           }
           unsub?.();
-          reject(new Error(message));
+          reject(humanizeTxError(message));
           return;
         }
 
@@ -125,7 +126,7 @@ async function signAndWait(tx: any, account: WalletAccount, step: TxProgress["st
     }).then((cleanup: () => void) => {
       unsub = cleanup;
       onProgress?.({ step, status: "signing" });
-    }).catch(reject);
+    }).catch((error: unknown) => reject(humanizeTxError(error)));
   });
 }
 

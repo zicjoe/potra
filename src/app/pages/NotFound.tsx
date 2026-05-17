@@ -27,7 +27,7 @@ export function NotFound() {
               Go Home
             </Button>
           </Link>
-          <Link to="/app/ecosystem">
+          <Link to="/app/swap">
             <Button variant="outline" className="gap-2">
               <Search className="size-4" />
               Explore Ecosystem

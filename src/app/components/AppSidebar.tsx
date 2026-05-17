@@ -3,7 +3,7 @@ import { Activity, ArrowLeftRight, Droplets, GitBranch, Globe, LayoutDashboard, 
 import { usePortaldot } from "../providers/PortaldotProvider";
 
 const navigation = [
-  { name: "Dashboard", href: "/app", icon: LayoutDashboard },
+  { name: "Dashboard", href: "/app/dashboard", icon: LayoutDashboard },
   { name: "Swap", href: "/app/swap", icon: ArrowLeftRight },
   { name: "Bridge", href: "/app/bridge", icon: GitBranch },
   { name: "Launch", href: "/app/launch", icon: Rocket },

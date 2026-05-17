@@ -3,9 +3,43 @@ import { BN } from "@polkadot/util";
 import { potraConfig } from "../config/env";
 import { parseUnits } from "./format";
 import { getPortaldotApi } from "./portaldot";
+import { humanizeTxError } from "./txErrors";
 import type { LaunchAssetResult, WalletAccount } from "./assets";
 
 export type LiquidityAsset = LaunchAssetResult;
+
+export const SYSTEM_ASSETS: LiquidityAsset[] = [
+  {
+    assetId: 910001,
+    name: "Wrapped Sepolia ETH",
+    symbol: "TESTETH",
+    totalSupply: "protocol market",
+    decimals: 6,
+    owner: "Potra bridge authority",
+    txHashes: [],
+    launchedAt: "protocol",
+  },
+  {
+    assetId: 910002,
+    name: "Wrapped BNB Testnet",
+    symbol: "TESTBNB",
+    totalSupply: "protocol market",
+    decimals: 6,
+    owner: "Potra bridge authority",
+    txHashes: [],
+    launchedAt: "protocol",
+  },
+  {
+    assetId: 910003,
+    name: "Wrapped Test USDT",
+    symbol: "TESTUSDT",
+    totalSupply: "protocol market",
+    decimals: 6,
+    owner: "Potra bridge authority",
+    txHashes: [],
+    launchedAt: "protocol",
+  },
+];
 
 export type CreateLiquidityParams = {
   account: WalletAccount;
@@ -34,7 +68,7 @@ export type LiquidityPosition = {
   assetTxHash: string;
   createdAt: string;
   status: "funded";
-  mode?: "managed-vault" | "legacy-vault";
+  mode?: "managed-vault" | "legacy-vault" | "market-preview";
 };
 
 const LIQUIDITY_REGISTRY_KEY = "potra.liquidityPositions.v1";
@@ -86,7 +120,7 @@ async function signAndWait(tx: any, account: WalletAccount, step: LiquidityProgr
     let unsub: undefined | (() => void);
     let resolved = false;
 
-    tx.signAndSend(account.address, { signer: injector.signer }, (result: any) => {
+    tx.signAndSend(account.address, { signer: injector.signer, nonce: -1 }, (result: any) => {
       const txHash = tx.hash?.toString?.() || result.txHash?.toString?.();
 
       if (result.status?.isBroadcast) {
@@ -101,7 +135,7 @@ async function signAndWait(tx: any, account: WalletAccount, step: LiquidityProgr
         const failure = result.dispatchError;
         if (failure) {
           unsub?.();
-          reject(new Error(failure.toString()));
+          reject(humanizeTxError(failure.toString()));
           return;
         }
 
@@ -115,7 +149,7 @@ async function signAndWait(tx: any, account: WalletAccount, step: LiquidityProgr
     }).then((cleanup: () => void) => {
       unsub = cleanup;
       onProgress?.({ step, status: "signing" });
-    }).catch(reject);
+    }).catch((error: unknown) => reject(humanizeTxError(error)));
   });
 }
 
@@ -165,16 +199,111 @@ export function getLiquidityPositions(): LiquidityPosition[] {
   }
 }
 
+export function getSupportedLiquidityAssets(userAssets: LiquidityAsset[] = []): LiquidityAsset[] {
+  const registry = new Map<number, LiquidityAsset>();
+  for (const asset of [...SYSTEM_ASSETS, ...userAssets]) {
+    registry.set(asset.assetId, asset);
+  }
+  return Array.from(registry.values());
+}
+
+
+export const MARKET_PREVIEW_POSITIONS: LiquidityPosition[] = [
+  {
+    id: "PREVIEW-POT-TESTETH",
+    owner: "Potra protocol market",
+    poolAddress: "ready after market funding",
+    assetId: 910001,
+    assetName: "Wrapped Sepolia ETH",
+    assetSymbol: "TESTETH",
+    assetDecimals: 6,
+    potAmount: "500",
+    assetAmount: "250",
+    potTxHash: "market-preview",
+    assetTxHash: "market-preview",
+    createdAt: "market-preview",
+    status: "funded",
+    mode: "market-preview",
+  },
+  {
+    id: "PREVIEW-POT-TESTBNB",
+    owner: "Potra protocol market",
+    poolAddress: "ready after market funding",
+    assetId: 910002,
+    assetName: "Wrapped BNB Testnet",
+    assetSymbol: "TESTBNB",
+    assetDecimals: 6,
+    potAmount: "500",
+    assetAmount: "500",
+    potTxHash: "market-preview",
+    assetTxHash: "market-preview",
+    createdAt: "market-preview",
+    status: "funded",
+    mode: "market-preview",
+  },
+  {
+    id: "PREVIEW-POT-TESTUSDT",
+    owner: "Potra protocol market",
+    poolAddress: "ready after market funding",
+    assetId: 910003,
+    assetName: "Wrapped Test USDT",
+    assetSymbol: "TESTUSDT",
+    assetDecimals: 6,
+    potAmount: "500",
+    assetAmount: "50000",
+    potTxHash: "market-preview",
+    assetTxHash: "market-preview",
+    createdAt: "market-preview",
+    status: "funded",
+    mode: "market-preview",
+  },
+];
+
+export function getDisplayMarketPositions(): LiquidityPosition[] {
+  const realPositions = getLiquidityPositions();
+  const realAssetIds = new Set(realPositions.map((item) => item.assetId));
+  return [
+    ...realPositions,
+    ...MARKET_PREVIEW_POSITIONS.filter((item) => !realAssetIds.has(item.assetId)),
+  ];
+}
+
+export async function getDefaultMarketPositions(): Promise<LiquidityPosition[]> {
+  const response = await fetch(`${potraConfig.faucetApi}/api/markets/defaults`);
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok || !data.ok || !Array.isArray(data.markets)) {
+    throw new Error(data.error || "Unable to load Potra default markets");
+  }
+
+  const markets = data.markets as LiquidityPosition[];
+  upsertLiquidityPositions(markets, false);
+  return markets;
+}
+
 export function saveLiquidityPosition(position: LiquidityPosition) {
+  upsertLiquidityPositions([position], true);
+}
+
+export function upsertLiquidityPositions(positions: LiquidityPosition[], dispatch = true) {
   const existing = getLiquidityPositions();
-  const next = [position, ...existing.filter((item) => item.id !== position.id)].slice(0, 50);
+  const incomingIds = new Set(positions.map((item) => item.id));
+  const next = [...positions, ...existing.filter((item) => !incomingIds.has(item.id))].slice(0, 50);
   localStorage.setItem(LIQUIDITY_REGISTRY_KEY, JSON.stringify(next));
-  window.dispatchEvent(new CustomEvent("potra:liquidity-created", { detail: position }));
+
+  if (dispatch) {
+    for (const position of positions) {
+      window.dispatchEvent(new CustomEvent("potra:liquidity-created", { detail: position }));
+    }
+  }
 }
 
 export function updateLiquidityPosition(position: LiquidityPosition) {
   const existing = getLiquidityPositions();
-  const next = existing.map((item) => item.id === position.id ? position : item);
-  localStorage.setItem(LIQUIDITY_REGISTRY_KEY, JSON.stringify(next));
+  const found = existing.some((item) => item.id === position.id);
+  const next = found
+    ? existing.map((item) => item.id === position.id ? position : item)
+    : [position, ...existing];
+  localStorage.setItem(LIQUIDITY_REGISTRY_KEY, JSON.stringify(next.slice(0, 50)));
   window.dispatchEvent(new CustomEvent("potra:liquidity-updated", { detail: position }));
 }

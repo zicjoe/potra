@@ -1,7 +1,6 @@
 import { Outlet } from "react-router";
 import { AppSidebar } from "../components/AppSidebar";
 import { AppHeader } from "../components/AppHeader";
-import { LiveActivityPanel } from "../components/LiveActivityPanel";
 
 export function AppLayout() {
   return (
@@ -15,7 +14,6 @@ export function AppLayout() {
           </div>
         </main>
       </div>
-      <LiveActivityPanel />
     </div>
   );
 }

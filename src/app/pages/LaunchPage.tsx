@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { CheckCircle2, Copy, ExternalLink, Globe, Loader2, Rocket, Send, ShieldCheck, Twitter, Upload } from "lucide-react";
 import { toast } from "sonner";
@@ -28,6 +28,8 @@ export function LaunchPage() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [launchedAsset, setLaunchedAsset] = useState<LaunchAssetResult | null>(null);
   const [recentLaunches, setRecentLaunches] = useState<LaunchAssetResult[]>([]);
+  const [isLaunchSubmitting, setIsLaunchSubmitting] = useState(false);
+  const launchLockRef = useRef(false);
 
   useEffect(() => {
     setRecentLaunches(getLaunchedAssets());
@@ -57,6 +59,8 @@ export function LaunchPage() {
     Number(totalSupply) > 0,
   );
 
+  const launchBusy = isLaunchingAsset || isLaunchSubmitting;
+
   const resetForm = () => {
     setTokenName("");
     setTokenSymbol("");
@@ -69,10 +73,18 @@ export function LaunchPage() {
   };
 
   const handleLaunch = async () => {
+    if (launchLockRef.current || launchBusy) {
+      toast.message("Token launch already in progress. Wait for the wallet transaction to finish.");
+      return;
+    }
+
     if (!canLaunch) {
       toast.error(selectedAccount ? "Complete the required token fields" : "Connect your wallet first");
       return;
     }
+
+    launchLockRef.current = true;
+    setIsLaunchSubmitting(true);
 
     try {
       const result = await launchAsset({
@@ -92,6 +104,9 @@ export function LaunchPage() {
       toast.success(`${result.symbol} launched on Portaldot`, { description: `Asset ID ${result.assetId}` });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Token launch failed");
+    } finally {
+      launchLockRef.current = false;
+      setIsLaunchSubmitting(false);
     }
   };
 
@@ -130,7 +145,7 @@ export function LaunchPage() {
                     placeholder="e.g., Game Credit"
                     value={tokenName}
                     onChange={(event) => setTokenName(event.target.value)}
-                    disabled={isLaunchingAsset}
+                    disabled={launchBusy}
                   />
                 </div>
 
@@ -142,7 +157,7 @@ export function LaunchPage() {
                     value={tokenSymbol}
                     maxLength={12}
                     onChange={(event) => setTokenSymbol(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
-                    disabled={isLaunchingAsset}
+                    disabled={launchBusy}
                   />
                 </div>
               </div>
@@ -156,7 +171,7 @@ export function LaunchPage() {
                   placeholder="1000000"
                   value={totalSupply}
                   onChange={(event) => setTotalSupply(event.target.value)}
-                  disabled={isLaunchingAsset}
+                  disabled={launchBusy}
                 />
                 <p className="text-xs text-muted-foreground">
                   The supply is minted to your connected wallet after the asset is created.
@@ -171,7 +186,7 @@ export function LaunchPage() {
                   rows={3}
                   value={description}
                   onChange={(event) => setDescription(event.target.value)}
-                  disabled={isLaunchingAsset}
+                  disabled={launchBusy}
                 />
               </div>
 
@@ -189,15 +204,15 @@ export function LaunchPage() {
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     <div className="size-10 rounded-lg bg-muted/50 flex items-center justify-center"><Twitter className="size-4" /></div>
-                    <Input placeholder="https://x.com/yourtoken" value={twitter} onChange={(event) => setTwitter(event.target.value)} disabled={isLaunchingAsset} />
+                    <Input placeholder="https://x.com/yourtoken" value={twitter} onChange={(event) => setTwitter(event.target.value)} disabled={launchBusy} />
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="size-10 rounded-lg bg-muted/50 flex items-center justify-center"><Globe className="size-4" /></div>
-                    <Input placeholder="https://yourtoken.com" value={website} onChange={(event) => setWebsite(event.target.value)} disabled={isLaunchingAsset} />
+                    <Input placeholder="https://yourtoken.com" value={website} onChange={(event) => setWebsite(event.target.value)} disabled={launchBusy} />
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="size-10 rounded-lg bg-muted/50 flex items-center justify-center"><Send className="size-4" /></div>
-                    <Input placeholder="https://t.me/yourtoken" value={telegram} onChange={(event) => setTelegram(event.target.value)} disabled={isLaunchingAsset} />
+                    <Input placeholder="https://t.me/yourtoken" value={telegram} onChange={(event) => setTelegram(event.target.value)} disabled={launchBusy} />
                   </div>
                 </div>
               </div>
@@ -208,7 +223,7 @@ export function LaunchPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Initial Liquidity Plan</CardTitle>
-                <Switch checked={withLiquidity} onCheckedChange={setWithLiquidity} disabled={isLaunchingAsset} />
+                <Switch checked={withLiquidity} onCheckedChange={setWithLiquidity} disabled={launchBusy} />
               </div>
               <p className="text-sm text-muted-foreground mt-1">
                 After launch, use the Liquidity page to fund a real POT pair for this asset.
@@ -223,7 +238,7 @@ export function LaunchPage() {
                     placeholder="100"
                     value={liquidityAmount}
                     onChange={(event) => setLiquidityAmount(event.target.value)}
-                    disabled={isLaunchingAsset}
+                    disabled={launchBusy}
                   />
                   <p className="text-xs text-muted-foreground">
                     Your current POT balance: {potBalance}. Use this as your suggested POT amount when you create the liquidity pool.
@@ -253,11 +268,11 @@ export function LaunchPage() {
           <Button
             className="w-full gap-2 bg-gradient-to-r from-primary to-chart-2 hover:opacity-90"
             size="lg"
-            disabled={!canLaunch || isLaunchingAsset}
+            disabled={!canLaunch || launchBusy}
             onClick={handleLaunch}
           >
-            {isLaunchingAsset ? <Loader2 className="size-4 animate-spin" /> : <Rocket className="size-4" />}
-            {isLaunchingAsset ? "Launching on Portaldot..." : "Launch Token Onchain"}
+            {launchBusy ? <Loader2 className="size-4 animate-spin" /> : <Rocket className="size-4" />}
+            {launchBusy ? "Launching on Portaldot..." : "Launch Token"}
           </Button>
         </div>
 
@@ -284,7 +299,7 @@ export function LaunchPage() {
               </div>
 
               <div className="p-3 rounded-lg border border-border/50 bg-muted/20 text-xs text-muted-foreground leading-relaxed">
-                Launch sequence: create asset, set metadata, mint supply. Your wallet signs each real extrinsic.
+                Potra creates the asset, records its metadata, and mints the supply to your wallet.
               </div>
             </CardContent>
           </Card>

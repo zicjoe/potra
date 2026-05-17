@@ -1,4 +1,4 @@
-import { createBrowserRouter } from "react-router";
+import { createBrowserRouter, Navigate } from "react-router";
 import { LandingPage } from "./pages/LandingPage";
 import { AppLayout } from "./layouts/AppLayout";
 import { Dashboard } from "./pages/Dashboard";
@@ -20,7 +20,8 @@ export const router = createBrowserRouter([
     path: "/app",
     Component: AppLayout,
     children: [
-      { index: true, Component: Dashboard },
+      { index: true, element: <Navigate to="swap" replace /> },
+      { path: "dashboard", Component: Dashboard },
       { path: "swap", Component: SwapPage },
       { path: "bridge", Component: BridgePage },
       { path: "launch", Component: LaunchPage },

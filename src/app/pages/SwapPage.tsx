@@ -1,249 +1,277 @@
-import { useEffect, useMemo, useState } from "react";
-import { ArrowDownUp, CheckCircle2, Info, Loader2, Settings, ShieldCheck } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ArrowDown, ArrowUpDown, CheckCircle2, ChevronDown, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "../components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { Card, CardContent } from "../components/ui/card";
 import { Input } from "../components/ui/input";
-import { Label } from "../components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog";
-import { Slider } from "../components/ui/slider";
-import { Badge } from "../components/ui/badge";
-import { getLiquidityPositions, isManagedLiquidityPosition, LiquidityPosition } from "../blockchain/liquidity";
-import { getSwapQuote, SwapResult } from "../blockchain/swap";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu";
+import { TokenIcon } from "../components/TokenIcon";
+import { getDisplayMarketPositions, isManagedLiquidityPosition, type LiquidityPosition } from "../blockchain/liquidity";
+import { getSwapQuote, type SwapDirection, type SwapResult } from "../blockchain/swap";
+import { findMatchingToken, getDefaultPairToken, getTradeTokens, POT_TOKEN, sameToken, TOKEN_REGISTRY_EVENTS, tokenKey, type TradeTokenOption } from "../blockchain/tokens";
 import { usePortaldot } from "../providers/PortaldotProvider";
 import { shortAddress } from "../config/env";
 
+function TokenSelector({
+  value,
+  tokens,
+  onChange,
+}: {
+  value: TradeTokenOption;
+  tokens: TradeTokenOption[];
+  onChange: (token: TradeTokenOption) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" className="h-12 gap-3 rounded-full bg-background/70 px-3 pr-4">
+          <TokenIcon symbol={value.symbol} size="sm" />
+          <span className="font-semibold">{value.symbol}</span>
+          <ChevronDown className="size-4 opacity-60" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-72 max-h-80 overflow-y-auto">
+        {tokens.map((token) => (
+          <DropdownMenuItem
+            key={tokenKey(token)}
+            onClick={() => onChange(token)}
+            className="p-3"
+          >
+            <TokenIcon symbol={token.symbol} size="sm" />
+            <div>
+              <p className="font-medium">{token.symbol}</p>
+              <p className="text-xs text-muted-foreground">{token.name}</p>
+            </div>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function findPoolForPair(positions: LiquidityPosition[], from: TradeTokenOption, to: TradeTokenOption) {
+  const asset = from.isPot ? to : to.isPot ? from : undefined;
+  if (!asset?.assetId) return undefined;
+  return positions.find((pool) => pool.assetId === asset.assetId);
+}
+
+function directionForPair(from: TradeTokenOption, to: TradeTokenOption): SwapDirection | null {
+  if (from.isPot && !to.isPot) return "potToAsset";
+  if (!from.isPot && to.isPot) return "assetToPot";
+  return null;
+}
+
 export function SwapPage() {
   const { selectedAccount, status, executeSwap, isExecutingSwap } = usePortaldot();
+  const [tokens, setTokens] = useState<TradeTokenOption[]>(() => getTradeTokens());
   const [positions, setPositions] = useState<LiquidityPosition[]>([]);
-  const [selectedPool, setSelectedPool] = useState<LiquidityPosition>();
+  const [fromToken, setFromToken] = useState<TradeTokenOption>(POT_TOKEN);
+  const [toToken, setToToken] = useState<TradeTokenOption>(() => getDefaultPairToken(getTradeTokens()) || POT_TOKEN);
   const [fromAmount, setFromAmount] = useState("");
-  const [slippage, setSlippage] = useState([0.5]);
-  const [direction, setDirection] = useState<"potToAsset" | "assetToPot">("potToAsset");
   const [successOpen, setSuccessOpen] = useState(false);
   const [latestSwap, setLatestSwap] = useState<SwapResult | null>(null);
 
-  useEffect(() => {
-    const refresh = () => {
-      const next = getLiquidityPositions();
-      setPositions(next);
-      setSelectedPool((current) => {
-        if (current) {
-          return next.find((pool) => pool.id === current.id) || next[0];
-        }
-        return next[0];
-      });
-    };
-    refresh();
-    window.addEventListener("potra:liquidity-created", refresh);
-    window.addEventListener("potra:liquidity-updated", refresh);
-    window.addEventListener("potra:swap-executed", refresh);
-    return () => {
-      window.removeEventListener("potra:liquidity-created", refresh);
-      window.removeEventListener("potra:liquidity-updated", refresh);
-      window.removeEventListener("potra:swap-executed", refresh);
-    };
+  const refresh = useCallback(() => {
+    const nextTokens = getTradeTokens();
+    const nextPositions = getDisplayMarketPositions();
+
+    setTokens(nextTokens);
+    setPositions(nextPositions);
+    setFromToken((current) => findMatchingToken(nextTokens, current) || POT_TOKEN);
+    setToToken((current) => findMatchingToken(nextTokens, current) || getDefaultPairToken(nextTokens) || POT_TOKEN);
   }, []);
 
-  const quote = useMemo(() => {
-    if (!selectedPool) return null;
-    return getSwapQuote(selectedPool, direction, fromAmount, slippage[0]);
-  }, [direction, fromAmount, selectedPool, slippage]);
+  useEffect(() => {
+    refresh();
+    TOKEN_REGISTRY_EVENTS.forEach((eventName) => window.addEventListener(eventName, refresh));
+    window.addEventListener("storage", refresh);
 
-  const fromSymbol = direction === "potToAsset" ? "POT" : selectedPool?.assetSymbol || "ASSET";
-  const toSymbol = direction === "potToAsset" ? selectedPool?.assetSymbol || "ASSET" : "POT";
-  const selectedPoolIsManaged = selectedPool ? isManagedLiquidityPosition(selectedPool) : false;
+    return () => {
+      TOKEN_REGISTRY_EVENTS.forEach((eventName) => window.removeEventListener(eventName, refresh));
+      window.removeEventListener("storage", refresh);
+    };
+  }, [refresh]);
+
+  const selectedPool = useMemo(() => findPoolForPair(positions, fromToken, toToken), [fromToken, positions, toToken]);
+  const direction = directionForPair(fromToken, toToken);
+
+  const quote = useMemo(() => {
+    if (!selectedPool || !direction) return null;
+    return getSwapQuote(selectedPool, direction, fromAmount, 0.5);
+  }, [direction, fromAmount, selectedPool]);
+
+  const poolIsReady = selectedPool ? isManagedLiquidityPosition(selectedPool) : false;
+  const receiveValue = quote?.outputAmount || "";
+
+  const buttonLabel = !selectedAccount
+    ? "Connect wallet"
+    : status !== "connected"
+      ? "Start Portaldot node"
+      : sameToken(fromToken, toToken)
+        ? "Select different tokens"
+        : !direction
+          ? "Select a POT market"
+          : !poolIsReady
+            ? "Create liquidity first"
+            : !Number(fromAmount)
+              ? "Enter amount"
+              : isExecutingSwap
+                ? "Swapping..."
+                : "Swap";
 
   const canSwap = Boolean(
     selectedAccount &&
     status === "connected" &&
     selectedPool &&
-    selectedPoolIsManaged &&
-    quote &&
+    poolIsReady &&
+    direction &&
+    !sameToken(fromToken, toToken) &&
     Number(fromAmount) > 0 &&
     !isExecutingSwap,
   );
 
-  const swapButtonLabel = !selectedAccount
-    ? "Connect wallet to swap"
-    : status !== "connected"
-      ? "Start Portaldot local node"
-      : !selectedPool
-        ? "Create liquidity first"
-        : !selectedPoolIsManaged
-          ? "Create fresh managed liquidity for swaps"
-          : isExecutingSwap
-            ? "Executing onchain swap..."
-            : quote
-              ? `Swap ${fromAmount || "0"} ${fromSymbol} for ${quote.outputAmount} ${toSymbol}`
-              : "Enter an amount";
+  const selectFromToken = (token: TradeTokenOption) => {
+    if (sameToken(token, toToken)) {
+      setToToken(fromToken);
+    }
+    if (!token.isPot && !toToken.isPot) {
+      setToToken(POT_TOKEN);
+    }
+    setFromToken(token);
+  };
+
+  const selectToToken = (token: TradeTokenOption) => {
+    if (sameToken(token, fromToken)) {
+      setFromToken(toToken || POT_TOKEN);
+    }
+    if (!token.isPot && !fromToken.isPot) {
+      setFromToken(POT_TOKEN);
+    }
+    setToToken(token);
+  };
+
+  const switchTokens = () => {
+    setFromToken(toToken);
+    setToToken(fromToken);
+    setFromAmount(receiveValue || "");
+  };
 
   const handleSwap = async () => {
-    if (!selectedPool) {
-      toast.error("Select a funded pool before swapping");
-      return;
-    }
+    if (!selectedPool || !direction) return;
 
     try {
       const result = await executeSwap({
         pool: selectedPool,
         direction,
         inputAmount: fromAmount,
-        slippagePercent: slippage[0],
+        slippagePercent: 0.5,
       });
       setLatestSwap(result);
       setSuccessOpen(true);
       setFromAmount("");
-      toast.success(`${result.assetSymbol}/POT swap completed onchain`, {
-        description: shortAddress(result.outputTxHash),
-      });
+      toast.success("Swap completed", { description: shortAddress(result.outputTxHash) });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Swap failed");
     }
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
+    <div className="min-h-[calc(100vh-8rem)] flex items-start justify-center py-8">
+      <div className="w-full max-w-xl space-y-5">
+        <div className="text-center space-y-2">
           <h1 className="text-3xl font-bold">Swap</h1>
-          <p className="text-muted-foreground mt-1">Execute two-leg onchain swaps through Potra managed pool vaults</p>
+          <p className="text-sm text-muted-foreground">Trade POT, bridge assets, and launched tokens.</p>
         </div>
-        <Badge variant="outline" className="gap-2 border-success/30 bg-success/10 text-success">
-          <ShieldCheck className="size-4" /> Real onchain settlement
-        </Badge>
-      </div>
 
-      <div className="grid grid-cols-3 gap-6">
-        <div className="col-span-2 space-y-6">
-          <Card className="bg-card/50 border-border/50">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Swap</CardTitle>
-              <Dialog>
-                <DialogTrigger asChild><Button variant="ghost" size="icon"><Settings className="size-4" /></Button></DialogTrigger>
-                <DialogContent>
-                  <DialogHeader><DialogTitle>Swap Settings</DialogTitle></DialogHeader>
-                  <div className="space-y-6 py-4">
-                    <div className="space-y-3">
-                      <Label>Slippage Tolerance: {slippage[0]}%</Label>
-                      <Slider value={slippage} onValueChange={setSlippage} max={5} step={0.1} />
-                      <div className="flex gap-2">
-                        <Button variant="outline" size="sm" onClick={() => setSlippage([0.5])}>0.5%</Button>
-                        <Button variant="outline" size="sm" onClick={() => setSlippage([1])}>1%</Button>
-                        <Button variant="outline" size="sm" onClick={() => setSlippage([2])}>2%</Button>
-                      </div>
-                    </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {positions.length === 0 ? (
-                <div className="p-8 rounded-xl border border-dashed border-primary/30 bg-primary/5 text-center">
-                  <h3 className="text-lg font-semibold">No funded pools yet</h3>
-                  <p className="text-sm text-muted-foreground mt-2">Create liquidity before executing swaps.</p>
-                </div>
-              ) : (
-                <>
-                  <div className="space-y-2">
-                    <Label>Pool</Label>
-                    <div className="grid gap-2">
-                      {positions.map((pool) => {
-                        const managed = isManagedLiquidityPosition(pool);
-                        return (
-                          <button key={pool.id} onClick={() => setSelectedPool(pool)} className={`p-3 rounded-lg border text-left transition-colors ${selectedPool?.id === pool.id ? "border-primary bg-primary/10" : "border-border/50 bg-muted/20 hover:bg-muted/30"}`}>
-                            <div className="flex items-center justify-between">
-                              <span className="font-medium">POT / {pool.assetSymbol}</span>
-                              <Badge variant="outline" className={managed ? "border-success/30 text-success" : "border-warning/30 text-warning"}>{managed ? "Swap ready" : "Legacy"}</Badge>
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-1">{pool.potAmount} POT + {pool.assetAmount} {pool.assetSymbol}</p>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="p-4 rounded-xl bg-muted/30 space-y-3">
-                    <div className="flex items-center justify-between"><Label>From</Label><span className="text-sm text-muted-foreground">{fromSymbol}</span></div>
-                    <Input type="number" placeholder="0.00" value={fromAmount} onChange={(e) => setFromAmount(e.target.value)} disabled={isExecutingSwap} className="text-2xl font-semibold border-0 bg-transparent p-0 h-auto" />
-                  </div>
-
-                  <div className="flex justify-center -my-2 relative z-10">
-                    <Button variant="outline" size="icon" onClick={() => setDirection(direction === "potToAsset" ? "assetToPot" : "potToAsset")} disabled={isExecutingSwap} className="rounded-full size-10 bg-card border-2"><ArrowDownUp className="size-4" /></Button>
-                  </div>
-
-                  <div className="p-4 rounded-xl bg-muted/30 space-y-3">
-                    <div className="flex items-center justify-between"><Label>To</Label><span className="text-sm text-muted-foreground">{toSymbol}</span></div>
-                    <Input type="number" placeholder="0.00" value={quote?.outputAmount || ""} readOnly className="text-2xl font-semibold border-0 bg-transparent p-0 h-auto" />
-                  </div>
-
-                  <div className="p-4 rounded-lg bg-primary/5 border border-primary/20 space-y-2 text-sm">
-                    <div className="flex items-center justify-between"><span className="text-muted-foreground">Route</span><span>{quote?.routeLabel || `POT/${selectedPool?.assetSymbol} managed vault`}</span></div>
-                    <div className="flex items-center justify-between"><span className="text-muted-foreground">Minimum received</span><span>{quote ? `${quote.minOutputAmount} ${toSymbol}` : "—"}</span></div>
-                    <div className="flex items-center justify-between"><span className="text-muted-foreground">Pool fee</span><span>{quote?.feePercent || "0.30"}%</span></div>
-                    <div className="flex items-center justify-between"><span className="text-muted-foreground">Price impact</span><span>{quote ? `${quote.priceImpactPercent}%` : "—"}</span></div>
-                    <div className="flex items-center justify-between"><span className="text-muted-foreground">Execution</span><span className="text-success">Two signed onchain legs</span></div>
-                  </div>
-
-                  <Button className="w-full gap-2 bg-gradient-to-r from-primary to-chart-2 hover:opacity-90" size="lg" disabled={!canSwap} onClick={handleSwap}>
-                    {isExecutingSwap && <Loader2 className="size-4 animate-spin" />}
-                    {swapButtonLabel}
-                  </Button>
-                </>
-              )}
-
-              <div className="flex items-start gap-2 p-3 rounded-lg bg-info/5 border border-info/20">
-                <Info className="size-4 text-info mt-0.5 flex-shrink-0" />
-                <p className="text-xs text-muted-foreground">This version performs real onchain settlement using a managed pool vault. The next phase can replace the managed vault with an ink! AMM contract when we package contracts for deployment.</p>
+        <Card className="border-border/50 bg-card/70 shadow-2xl shadow-primary/5">
+          <CardContent className="p-4 space-y-3">
+            <div className="rounded-2xl bg-muted/30 border border-border/40 p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">You pay</span>
               </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card className="bg-card/50 border-border/50">
-          <CardHeader><CardTitle>Funded Pools</CardTitle></CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {positions.length === 0 ? <div className="p-4 rounded-lg bg-muted/20 text-sm text-muted-foreground">No pools yet.</div> : positions.map((pool) => (
-                <div key={pool.id} className="p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-medium">POT / {pool.assetSymbol}</p>
-                    <Badge variant="outline" className={isManagedLiquidityPosition(pool) ? "text-success" : "text-warning"}>{isManagedLiquidityPosition(pool) ? "Ready" : "Legacy"}</Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">{pool.potAmount} POT + {pool.assetAmount} {pool.assetSymbol}</p>
-                  <p className="text-[11px] text-muted-foreground mt-1 font-mono">{shortAddress(pool.poolAddress)}</p>
-                </div>
-              ))}
+              <div className="flex items-center gap-3">
+                <Input
+                  type="number"
+                  placeholder="0.00"
+                  value={fromAmount}
+                  onChange={(event) => setFromAmount(event.target.value)}
+                  disabled={isExecutingSwap}
+                  className="h-14 border-0 bg-transparent p-0 text-4xl font-semibold focus-visible:ring-0"
+                />
+                <TokenSelector value={fromToken} tokens={tokens} onChange={selectFromToken} />
+              </div>
             </div>
+
+            <div className="flex justify-center -my-1 relative z-10">
+              <Button variant="outline" size="icon" className="size-11 rounded-full bg-background border-2" onClick={switchTokens}>
+                <ArrowDown className="size-5" />
+              </Button>
+            </div>
+
+            <div className="rounded-2xl bg-muted/30 border border-border/40 p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">You receive</span>
+                <span className="text-xs text-muted-foreground">Estimated</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <Input
+                  type="number"
+                  placeholder="0.00"
+                  value={receiveValue}
+                  readOnly
+                  className="h-14 border-0 bg-transparent p-0 text-4xl font-semibold focus-visible:ring-0"
+                />
+                <TokenSelector value={toToken} tokens={tokens} onChange={selectToToken} />
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border/40 bg-background/40 px-4 py-3 text-sm text-muted-foreground flex items-center justify-between gap-3">
+              <span>{sameToken(fromToken, toToken) ? "Choose two different tokens" : `${fromToken.symbol} → ${toToken.symbol}`}</span>
+              <span className={poolIsReady ? "text-success" : "text-muted-foreground"}>
+                {poolIsReady ? "Market ready" : "Add liquidity first"}
+              </span>
+            </div>
+
+            <Button
+              className="h-14 w-full rounded-2xl bg-gradient-to-r from-primary to-chart-2 text-base font-semibold hover:opacity-90"
+              disabled={!canSwap}
+              onClick={handleSwap}
+            >
+              {isExecutingSwap ? <Loader2 className="mr-2 size-4 animate-spin" /> : <ArrowUpDown className="mr-2 size-4" />}
+              {buttonLabel}
+            </Button>
           </CardContent>
         </Card>
+
+        <p className="text-center text-xs text-muted-foreground">
+          POT is pinned at the top. Bridge assets and launched tokens appear automatically.
+        </p>
       </div>
 
       <Dialog open={successOpen} onOpenChange={setSuccessOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-3">
-              <div className="size-12 rounded-full bg-success/10 border border-success/20 flex items-center justify-center">
+              <div className="size-11 rounded-full bg-success/10 border border-success/20 flex items-center justify-center">
                 <CheckCircle2 className="size-6 text-success" />
               </div>
-              Swap settled on Portaldot
+              Swap complete
             </DialogTitle>
           </DialogHeader>
 
           {latestSwap && (
             <div className="space-y-4 py-4">
-              <div className="text-center">
-                <h3 className="text-2xl font-bold mb-2">{fromSymbol} → {toSymbol}</h3>
-                <p className="text-muted-foreground">Potra completed the input deposit and vault settlement on the local Portaldot chain.</p>
-              </div>
-
               <div className="p-4 rounded-lg bg-muted/30 space-y-2 text-sm">
                 <div className="flex justify-between gap-4"><span className="text-muted-foreground">Input</span><span>{latestSwap.inputAmount}</span></div>
                 <div className="flex justify-between gap-4"><span className="text-muted-foreground">Output</span><span>{latestSwap.outputAmount}</span></div>
-                <div className="flex justify-between gap-4"><span className="text-muted-foreground">Input tx</span><span className="font-mono text-xs text-right">{shortAddress(latestSwap.inputTxHash, 10, 8)}</span></div>
-                <div className="flex justify-between gap-4"><span className="text-muted-foreground">Settlement tx</span><span className="font-mono text-xs text-right">{shortAddress(latestSwap.outputTxHash, 10, 8)}</span></div>
+                <div className="flex justify-between gap-4"><span className="text-muted-foreground">Transaction</span><span className="font-mono text-xs text-right">{shortAddress(latestSwap.outputTxHash, 10, 8)}</span></div>
               </div>
-
               <Button className="w-full bg-gradient-to-r from-primary to-chart-2" onClick={() => setSuccessOpen(false)}>
                 Done
               </Button>

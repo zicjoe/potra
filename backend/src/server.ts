@@ -30,6 +30,16 @@ const BRIDGE_ASSETS: Record<string, { assetId: number; symbol: string; name: str
   TESTUSDT: { assetId: 910003, symbol: "TESTUSDT", name: "Wrapped Test USDT", decimals: 6 },
 };
 
+const DEFAULT_MARKETS: Array<{ assetSymbol: keyof typeof BRIDGE_ASSETS; potAmount: string; assetAmount: string }> = [
+  { assetSymbol: "TESTETH", potAmount: "500", assetAmount: "250" },
+  { assetSymbol: "TESTBNB", potAmount: "500", assetAmount: "500" },
+  { assetSymbol: "TESTUSDT", potAmount: "500", assetAmount: "50000" },
+];
+
+const bootstrappedMarkets = new Set<number>();
+let defaultMarketsBootstrapPromise: Promise<any[]> | null = null;
+let backendTxQueue: Promise<unknown> = Promise.resolve();
+
 const EVM_BRIDGE_CONFIG: Record<string, { name: string; rpcUrl: string; vault: string; assetSymbol: "TESTETH" | "TESTBNB" }> = {
   sepolia: { name: "Ethereum Sepolia", rpcUrl: SEPOLIA_RPC_URL, vault: SEPOLIA_BRIDGE_VAULT, assetSymbol: "TESTETH" },
   "bnb-testnet": { name: "BNB Testnet", rpcUrl: BNB_TESTNET_RPC_URL, vault: BNB_BRIDGE_VAULT, assetSymbol: "TESTBNB" },
@@ -104,10 +114,10 @@ async function ensureBridgeAsset(asset: { assetId: number; symbol: string; name:
   if (!exists) {
     const created = await submitSignedTx(api.tx.assets.create(asset.assetId, bridgeAuthority.address, "1"), bridgeAuthority);
     txHashes.push(created.txHash);
-  }
 
-  const metadata = await submitSignedTx(api.tx.assets.setMetadata(asset.assetId, asset.name, asset.symbol, asset.decimals), bridgeAuthority);
-  txHashes.push(metadata.txHash);
+    const metadata = await submitSignedTx(api.tx.assets.setMetadata(asset.assetId, asset.name, asset.symbol, asset.decimals), bridgeAuthority);
+    txHashes.push(metadata.txHash);
+  }
 
   return { bridgeAuthority, txHashes };
 }
@@ -117,8 +127,62 @@ async function getPoolPair(assetId: number) {
   return keyring.addFromUri(`${POOL_SEED}//${assetId}`);
 }
 
+async function getNativeFreeBalance(address: string) {
+  const api = await getApi();
+  const account = await api.query.system.account(address);
+  return BigInt((account as any).data.free.toString());
+}
+
+async function getAssetFreeBalance(assetId: number, address: string) {
+  const api = await getApi();
+  const account = await api.query.assets.account(assetId, address);
+  if (!(account as any).isSome) return 0n;
+  return BigInt((account as any).unwrap().balance.toString());
+}
+
+async function bootstrapDefaultMarket(market: { assetSymbol: keyof typeof BRIDGE_ASSETS; potAmount: string; assetAmount: string }) {
+  const api = await getApi();
+  const keyring = await getKeyring();
+  const faucet = keyring.addFromUri(FAUCET_SEED);
+  const asset = BRIDGE_ASSETS[market.assetSymbol];
+  const pool = await getPoolPair(asset.assetId);
+  const { bridgeAuthority, txHashes } = await ensureBridgeAsset(asset);
+
+  const potRaw = parseUnits(market.potAmount, POT_DECIMALS).toString();
+  const assetRaw = parseAssetUnits(market.assetAmount, asset.decimals);
+
+  const existingPot = await getNativeFreeBalance(pool.address);
+  const existingAsset = await getAssetFreeBalance(asset.assetId, pool.address);
+  const alreadyFunded = existingPot > 0n && existingAsset > 0n;
+
+  if (!bootstrappedMarkets.has(asset.assetId) && !alreadyFunded) {
+    const potSeed = await submitSignedTx(api.tx.balances.transferKeepAlive(pool.address, potRaw), faucet);
+    const assetSeed = await submitSignedTx(api.tx.assets.mint(asset.assetId, pool.address, assetRaw), bridgeAuthority);
+    txHashes.push(potSeed.txHash, assetSeed.txHash);
+  }
+
+  bootstrappedMarkets.add(asset.assetId);
+
+  return {
+    id: `SYSTEM-POT-${asset.assetId}`,
+    owner: bridgeAuthority.address,
+    poolAddress: pool.address,
+    assetId: asset.assetId,
+    assetName: asset.name,
+    assetSymbol: asset.symbol,
+    assetDecimals: asset.decimals,
+    potAmount: market.potAmount,
+    assetAmount: market.assetAmount,
+    potTxHash: txHashes[txHashes.length - 2] || "protocol-seeded",
+    assetTxHash: txHashes[txHashes.length - 1] || "protocol-seeded",
+    createdAt: new Date().toISOString(),
+    status: "funded",
+    mode: "managed-vault",
+  };
+}
+
 async function submitSignedTx(tx: any, signer: any) {
-  return new Promise<{ txHash: string; blockHash?: string }>((resolve, reject) => {
+  const run = () => new Promise<{ txHash: string; blockHash?: string }>((resolve, reject) => {
     let settled = false;
     tx.signAndSend(signer, (result: any) => {
       if (result.dispatchError && !settled) {
@@ -136,6 +200,10 @@ async function submitSignedTx(tx: any, signer: any) {
       }
     }).catch(reject);
   });
+
+  const queued = backendTxQueue.then(run, run);
+  backendTxQueue = queued.catch(() => undefined);
+  return queued;
 }
 
 async function verifyEvmDeposit(params: { sourceNetwork: string; txHash: string; recipient: string; assetSymbol: string }) {
@@ -269,6 +337,27 @@ app.get("/api/pools/:assetId/address", async (req, res) => {
     res.json({ ok: true, assetId, address: pool.address, mode: "managed-vault" });
   } catch (error) {
     res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Unable to derive pool address" });
+  }
+});
+
+app.get("/api/markets/defaults", async (_req, res) => {
+  try {
+    if (!defaultMarketsBootstrapPromise) {
+      defaultMarketsBootstrapPromise = (async () => {
+        const markets = [];
+        for (const market of DEFAULT_MARKETS) {
+          markets.push(await bootstrapDefaultMarket(market));
+        }
+        return markets;
+      })();
+    }
+
+    const markets = await defaultMarketsBootstrapPromise;
+    res.json({ ok: true, mode: "protocol-seeded-markets", markets });
+  } catch (error) {
+    defaultMarketsBootstrapPromise = null;
+    const message = error instanceof Error ? error.message : "Unable to load default markets";
+    res.status(500).json({ ok: false, error: message.includes("Priority is too low") ? "Market setup is already being processed. Wait a few seconds, then refresh Swap." : message });
   }
 });
 
@@ -424,6 +513,6 @@ app.listen(PORT, () => {
   console.log(`Potra API running on http://localhost:${PORT}`);
   console.log(`Connected RPC target: ${RPC}`);
   console.log("Faucet mode: real local-chain POT transfers");
-  console.log("Swap mode: managed-vault two-leg onchain settlement");
+  console.log("Swap mode: protocol-seeded markets + managed-vault two-leg onchain settlement");
   console.log("Bridge mode: EVM testnet deposit relay + Portaldot authority mint");
 });
