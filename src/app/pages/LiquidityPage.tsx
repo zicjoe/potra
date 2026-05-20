@@ -15,7 +15,7 @@ import {
 import { TokenIcon } from "../components/TokenIcon";
 import { usePortaldot } from "../providers/PortaldotProvider";
 import { getLiquidityPositions, type LiquidityPosition } from "../blockchain/liquidity";
-import { findMatchingToken, getDefaultPairToken, getTradeTokens, POT_TOKEN, sameToken, TOKEN_REGISTRY_EVENTS, tokenKey, type TradeTokenOption } from "../blockchain/tokens";
+import { findMatchingToken, getDefaultPairToken, getTradeTokens, POT_TOKEN, sameToken, syncTradeRegistryFromBackend, TOKEN_REGISTRY_EVENTS, tokenKey, type TradeTokenOption } from "../blockchain/tokens";
 import { shortAddress } from "../config/env";
 
 function TokenSelector({
@@ -76,6 +76,7 @@ export function LiquidityPage() {
 
   useEffect(() => {
     refresh();
+    syncTradeRegistryFromBackend().then(refresh).catch(() => undefined);
     TOKEN_REGISTRY_EVENTS.forEach((eventName) => window.addEventListener(eventName, refresh));
     window.addEventListener("storage", refresh);
 
@@ -116,7 +117,7 @@ export function LiquidityPage() {
   const buttonLabel = !selectedAccount
     ? "Connect wallet"
     : status !== "connected"
-      ? "Start Portaldot node"
+      ? "Portaldot offline"
       : sameToken(tokenA, tokenB)
         ? "Select different tokens"
         : !assetSide

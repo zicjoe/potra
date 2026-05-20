@@ -14,7 +14,7 @@ import {
 import { TokenIcon } from "../components/TokenIcon";
 import { getDisplayMarketPositions, isManagedLiquidityPosition, type LiquidityPosition } from "../blockchain/liquidity";
 import { getSwapQuote, type SwapDirection, type SwapResult } from "../blockchain/swap";
-import { findMatchingToken, getDefaultPairToken, getTradeTokens, POT_TOKEN, sameToken, TOKEN_REGISTRY_EVENTS, tokenKey, type TradeTokenOption } from "../blockchain/tokens";
+import { findMatchingToken, getDefaultPairToken, getTradeTokens, POT_TOKEN, sameToken, syncTradeRegistryFromBackend, TOKEN_REGISTRY_EVENTS, tokenKey, type TradeTokenOption } from "../blockchain/tokens";
 import { usePortaldot } from "../providers/PortaldotProvider";
 import { shortAddress } from "../config/env";
 
@@ -89,6 +89,7 @@ export function SwapPage() {
 
   useEffect(() => {
     refresh();
+    syncTradeRegistryFromBackend().then(refresh).catch(() => undefined);
     TOKEN_REGISTRY_EVENTS.forEach((eventName) => window.addEventListener(eventName, refresh));
     window.addEventListener("storage", refresh);
 
@@ -112,7 +113,7 @@ export function SwapPage() {
   const buttonLabel = !selectedAccount
     ? "Connect wallet"
     : status !== "connected"
-      ? "Start Portaldot node"
+      ? "Portaldot offline"
       : sameToken(fromToken, toToken)
         ? "Select different tokens"
         : !direction

@@ -8,7 +8,7 @@ New chains often have raw infrastructure but weak user flow. Potra packages the 
 
 ## What to test
 
-1. Start the Portaldot local node.
+1. Use the hosted Portaldot RPC or start the local node for fallback testing.
 2. Start the Potra backend.
 3. Start the Potra frontend.
 4. Open `/app/swap`.
@@ -21,7 +21,7 @@ New chains often have raw infrastructure but weak user flow. Potra packages the 
 
 ## Onchain proof points
 
-- Faucet claim submits a real local-chain POT transfer.
+- Faucet claim submits a real Portaldot POT transfer.
 - Token launch uses real Assets pallet extrinsics.
 - Liquidity funding moves real POT and asset balances to a managed pool address.
 - Swap flow uses a real input transaction and backend managed-vault settlement.

@@ -28,12 +28,12 @@ const features = [
   {
     icon: Shield,
     title: "Secure & Audited",
-    description: "Every active launch and liquidity action is backed by signed local-chain transactions."
+    description: "Every launch and liquidity action is backed by signed Portaldot transactions."
   },
   {
     icon: Zap,
     title: "Instant Finality",
-    description: "Connect directly to a local Portaldot node and verify execution through real chain state."
+    description: "Connect to the hosted Portaldot RPC and verify execution through real chain state."
   },
   {
     icon: TrendingUp,

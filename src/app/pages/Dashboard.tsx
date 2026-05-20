@@ -7,7 +7,7 @@ import { Badge } from "../components/ui/badge";
 import { usePortaldot } from "../providers/PortaldotProvider";
 import { getLaunchedAssets, LaunchAssetResult } from "../blockchain/assets";
 import { getLiquidityPositions, LiquidityPosition } from "../blockchain/liquidity";
-import { shortAddress } from "../config/env";
+import { potraConfig, shortAddress } from "../config/env";
 
 export function Dashboard() {
   const { selectedAccount, potBalance, status } = usePortaldot();
@@ -30,9 +30,9 @@ export function Dashboard() {
 
   const stats = [
     { label: "POT Balance", value: potBalance, helper: selectedAccount ? "Connected wallet" : "Connect wallet" },
-    { label: "Launched Assets", value: String(assets.length), helper: "Local Portaldot assets" },
+    { label: "Launched Assets", value: String(assets.length), helper: "Portaldot native assets" },
     { label: "Funded Pools", value: String(positions.length), helper: "Onchain pool vaults" },
-    { label: "RPC Status", value: status === "connected" ? "Online" : "Offline", helper: "Local node" },
+    { label: "RPC Status", value: status === "connected" ? "Online" : "Offline", helper: potraConfig.chainEnv === "hosted" ? "Hosted RPC" : "Local RPC" },
   ];
 
   return (
@@ -40,7 +40,7 @@ export function Dashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Dashboard</h1>
-          <p className="text-muted-foreground mt-1">Your local Portaldot workspace inside Potra</p>
+          <p className="text-muted-foreground mt-1">Your Portaldot workspace inside Potra</p>
         </div>
         <div className="flex items-center gap-3">
           <Link to="/app/swap">

@@ -6,13 +6,13 @@ Potra is a real onchain Vite + React + TypeScript app built for the Portaldot Mi
 
 Potra is the easiest way to launch, bridge, swap, and provide liquidity inside the Portaldot economy.
 
-The app is intentionally simple on the surface and real underneath. The Swap and Liquidity pages look like normal DEX flows, while token launch, liquidity funding, faucet claims, bridge settlement, and managed-vault swap settlement use real signed Portaldot transactions in the local dev environment.
+The app is intentionally simple on the surface and real underneath. The Swap and Liquidity pages look like normal DEX flows, while token launch, liquidity funding, faucet claims, bridge settlement, and managed-vault swap settlement use real signed Portaldot transactions in the active Portaldot test environment.
 
 ## What works now
 
 - Vite + React + TypeScript frontend
 - Node backend inside `backend/`
-- Portaldot local dev node connection
+- Hosted or local Portaldot RPC connection
 - Polkadot ecosystem wallet connection
 - Test POT faucet
 - Real Portaldot asset launch through the Assets pallet
@@ -22,6 +22,7 @@ The app is intentionally simple on the surface and real underneath. The Swap and
 - Managed-vault swap settlement
 - Bridge authority mint flow
 - Real EVM Sepolia deposit bridge architecture and deployment tooling inside `evm/`
+- Neon Postgres shared registry for launched tokens, liquidity positions, swaps, and activity
 
 ## Main user flow
 
@@ -37,7 +38,7 @@ The app is intentionally simple on the surface and real underneath. The Swap and
 
 ## Local setup
 
-### 1. Start the Portaldot local node
+### 1. Start the Portaldot node
 
 Run this in **Ubuntu terminal**:
 
@@ -67,10 +68,12 @@ Copy-Item .env.example .env.local
 notepad .env.local
 ```
 
-For local testing, keep:
+For the hosted Contabo node, use:
 
 ```env
-VITE_PORTALDOT_RPC=ws://127.0.0.1:9944
+VITE_CHAIN_ENV=hosted
+VITE_PORTALDOT_RPC_URL=wss://rpc.194-163-190-189.sslip.io
+VITE_PORTALDOT_RPC=wss://rpc.194-163-190-189.sslip.io
 VITE_FAUCET_API=http://localhost:8787
 ```
 
@@ -95,10 +98,11 @@ Copy-Item .env.example .env
 notepad .env
 ```
 
-For local testing, keep:
+For the hosted Contabo node, use:
 
 ```env
-PORTALDOT_RPC=ws://127.0.0.1:9944
+PORTALDOT_RPC_URL=wss://rpc.194-163-190-189.sslip.io
+PORTALDOT_RPC=wss://rpc.194-163-190-189.sslip.io
 FAUCET_SEED=//Alice
 POTRA_POOL_SEED=//Alice//PotraPool
 CORS_ORIGIN=http://localhost:5173
@@ -133,6 +137,26 @@ Open this in your **browser address bar**:
 ```text
 http://localhost:5173/app/swap
 ```
+
+## Shared database
+
+Potra can run locally without a database, but public deployment should use Neon Postgres so user-created tokens and markets are visible across browsers.
+
+Run this SQL in Neon before Railway deployment:
+
+```text
+database/schema.sql
+```
+
+Add this only to the backend environment, never to frontend or Vercel:
+
+```env
+DATABASE_URL=postgresql://USER:PASSWORD@HOST.neon.tech/DBNAME?sslmode=require
+DATABASE_SSL=true
+DATABASE_POOL_MAX=5
+```
+
+See `docs/NEON_SETUP.md` for the full setup.
 
 ## EVM bridge tooling
 
@@ -179,4 +203,4 @@ Ignored files include:
 
 ## Judge notes
 
-Potra is not a static prototype. It uses a clean DEX-style UX, but the core actions are wired to real Portaldot local-chain transactions and bridge settlement flows. The hackathon proof is that a user can claim POT, launch an asset, add liquidity, and swap through a managed Portaldot market from one product surface.
+Potra is not a static prototype. It uses a clean DEX-style UX, but the core actions are wired to real Portaldot transactions and bridge settlement flows. The hackathon proof is that a user can claim POT, launch an asset, add liquidity, swap through a managed Portaldot market, and have the shared app registry persist those actions for other users.

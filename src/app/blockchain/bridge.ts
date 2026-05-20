@@ -33,7 +33,7 @@ export const bridgeAssets: Array<{ symbol: BridgeAssetSymbol; name: string; desc
 export const bridgeNetworks = [
   { id: "sepolia", name: "Ethereum Sepolia", icon: "ETH" },
   { id: "bnb-testnet", name: "BNB Testnet", icon: "BNB" },
-  { id: "portaldot-local", name: "Portaldot Local Devnet", icon: "POT" },
+  { id: "portaldot-local", name: "Portaldot Test Network", icon: "POT" },
 ];
 
 export const evmBridgeNetworks = [

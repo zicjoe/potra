@@ -30,6 +30,10 @@ export type LaunchAssetResult = {
   owner: string;
   txHashes: string[];
   launchedAt: string;
+  description?: string;
+  website?: string;
+  twitter?: string;
+  telegram?: string;
 };
 
 export const DEFAULT_ASSET_DECIMALS = 6;
@@ -42,6 +46,49 @@ type TxProgress = {
 };
 
 const ASSET_REGISTRY_KEY = "potra.launchedAssets.v1";
+
+async function postLaunchedAsset(asset: LaunchAssetResult) {
+  if (!potraConfig.faucetApi) return;
+
+  try {
+    await fetch(`${potraConfig.faucetApi}/api/registry/tokens`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(asset),
+    });
+  } catch {
+    // Local storage remains the optimistic fallback if the shared registry is unavailable.
+  }
+}
+
+export async function syncLaunchedAssetsFromBackend() {
+  if (!potraConfig.faucetApi) return getLaunchedAssets();
+
+  const response = await fetch(`${potraConfig.faucetApi}/api/registry/tokens`);
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok || !data.ok || !Array.isArray(data.tokens)) {
+    throw new Error(data.error || "Unable to load launched tokens");
+  }
+
+  upsertLaunchedAssets(data.tokens as LaunchAssetResult[], true);
+  return getLaunchedAssets();
+}
+
+function upsertLaunchedAssets(assets: LaunchAssetResult[], dispatch = false) {
+  const existing = getLaunchedAssets();
+  const incomingIds = new Set(assets.map((item) => item.assetId));
+  const next = [...assets, ...existing.filter((item) => !incomingIds.has(item.assetId))]
+    .filter((item) => item && Number.isFinite(Number(item.assetId)))
+    .slice(0, 100);
+
+  localStorage.setItem(ASSET_REGISTRY_KEY, JSON.stringify(next));
+
+  if (dispatch) {
+    window.dispatchEvent(new CustomEvent("potra:asset-launched", { detail: assets[0] }));
+  }
+}
+
 
 function maxHumanSupply(decimals: number) {
   const divisor = new BN(10).pow(new BN(decimals));
@@ -162,6 +209,10 @@ export async function launchNativeAsset(params: LaunchAssetParams, onProgress?: 
     owner: params.account.address,
     txHashes,
     launchedAt: new Date().toISOString(),
+    description: params.description?.trim() || undefined,
+    website: params.website?.trim() || undefined,
+    twitter: params.twitter?.trim() || undefined,
+    telegram: params.telegram?.trim() || undefined,
   };
 
   saveLaunchedAsset(result);
@@ -179,10 +230,8 @@ export function getLaunchedAssets(): LaunchAssetResult[] {
 }
 
 export function saveLaunchedAsset(asset: LaunchAssetResult) {
-  const existing = getLaunchedAssets();
-  const next = [asset, ...existing.filter((item) => item.assetId !== asset.assetId)].slice(0, 25);
-  localStorage.setItem(ASSET_REGISTRY_KEY, JSON.stringify(next));
-
+  upsertLaunchedAssets([asset], false);
+  void postLaunchedAsset(asset);
   window.dispatchEvent(new CustomEvent("potra:asset-launched", { detail: asset }));
 }
 

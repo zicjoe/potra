@@ -60,7 +60,7 @@ export function AppSidebar() {
             <div className={`size-2 rounded-full ${isOnline ? "bg-success animate-pulse" : "bg-warning"}`} />
             <span className="text-sm font-medium">{chainInfo?.chain || "Portaldot Local"}</span>
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">{isOnline ? "RPC connected" : "Start local node"}</p>
+          <p className="mt-2 text-xs text-muted-foreground">{isOnline ? "RPC connected" : "Check RPC"}</p>
         </div>
       </div>
     </aside>

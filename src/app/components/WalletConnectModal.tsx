@@ -74,7 +74,7 @@ export function WalletConnectModal({ open, onOpenChange }: WalletConnectModalPro
 
         <div className="text-center pt-2 border-t border-border/50">
           <p className="text-xs text-muted-foreground">
-            Use SubWallet, Polkadot.js, or Talisman with the Portaldot local node.
+            Use SubWallet, Polkadot.js, or Talisman with the active Portaldot network.
           </p>
         </div>
       </DialogContent>

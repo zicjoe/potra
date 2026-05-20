@@ -7,7 +7,7 @@ export function humanizeTxError(error: unknown) {
 
   if (isTxPoolPriorityError(raw)) {
     return new Error(
-      "A transaction from this wallet is already pending in the Portaldot transaction pool. Wait for it to confirm, then try again. If this is your local dev node and it stays stuck, restart the node and reconnect your wallet.",
+      "Portaldot is still processing a previous transaction from the same signer. Wait a few seconds, refresh your balance, then try again.",
     );
   }
 

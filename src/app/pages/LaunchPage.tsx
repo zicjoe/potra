@@ -11,7 +11,7 @@ import { Switch } from "../components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Badge } from "../components/ui/badge";
 import { usePortaldot } from "../providers/PortaldotProvider";
-import { DEFAULT_ASSET_DECIMALS, LaunchAssetResult, getLaunchedAssets } from "../blockchain/assets";
+import { DEFAULT_ASSET_DECIMALS, LaunchAssetResult, getLaunchedAssets, syncLaunchedAssetsFromBackend } from "../blockchain/assets";
 import { shortAddress } from "../config/env";
 
 export function LaunchPage() {
@@ -33,6 +33,7 @@ export function LaunchPage() {
 
   useEffect(() => {
     setRecentLaunches(getLaunchedAssets());
+    syncLaunchedAssetsFromBackend().then(() => setRecentLaunches(getLaunchedAssets())).catch(() => undefined);
     const handler = () => setRecentLaunches(getLaunchedAssets());
     window.addEventListener("potra:asset-launched", handler);
     return () => window.removeEventListener("potra:asset-launched", handler);
@@ -349,7 +350,7 @@ export function LaunchPage() {
               <div className="text-center">
                 <h3 className="text-2xl font-bold mb-2">{launchedAsset.symbol} is live</h3>
                 <p className="text-muted-foreground">
-                  Asset #{launchedAsset.assetId} was created, configured, and minted on the local Portaldot chain.
+                  Asset #{launchedAsset.assetId} was created, configured, and minted on Portaldot.
                 </p>
               </div>
 

@@ -1,7 +1,7 @@
 export const potraConfig = {
   appName: "Potra",
   chainEnv: import.meta.env.VITE_CHAIN_ENV || "local",
-  rpcUrl: import.meta.env.VITE_PORTALDOT_RPC || "ws://127.0.0.1:9944",
+  rpcUrl: import.meta.env.VITE_PORTALDOT_RPC_URL || import.meta.env.VITE_PORTALDOT_RPC || "ws://127.0.0.1:9944",
   explorerUrl: import.meta.env.VITE_PORTALDOT_EXPLORER || "",
   faucetApi: import.meta.env.VITE_FAUCET_API || "http://localhost:8787",
   potDecimals: Number(import.meta.env.VITE_POT_DECIMALS || 14),

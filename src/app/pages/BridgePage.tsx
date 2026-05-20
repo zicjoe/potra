@@ -76,7 +76,7 @@ export function BridgePage() {
   const buttonLabel = !selectedAccount
     ? "Connect Portaldot wallet to bridge"
     : status !== "connected"
-      ? "Start Portaldot local node"
+      ? "Connect Portaldot RPC"
       : isBridging
         ? mode === "real" ? "Depositing and settling bridge..." : "Bridging into Portaldot..."
         : mode === "real"
@@ -234,7 +234,7 @@ export function BridgePage() {
                         <div className="size-5 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
                           <span className="text-xs font-semibold">P</span>
                         </div>
-                        Portaldot Local Devnet
+                        Portaldot Test Network
                       </div>
                     </div>
                   </div>
@@ -287,7 +287,7 @@ export function BridgePage() {
 
                     <div className="space-y-2">
                       <Label>Destination</Label>
-                      <div className="h-10 rounded-md border border-border/50 bg-muted/20 px-3 flex items-center gap-2 text-sm">Portaldot Local Devnet</div>
+                      <div className="h-10 rounded-md border border-border/50 bg-muted/20 px-3 flex items-center gap-2 text-sm">Portaldot Test Network</div>
                     </div>
                   </div>
 
@@ -346,7 +346,7 @@ export function BridgePage() {
                         <Step done={progress > 10} label="Bridge request accepted" />
                         <Step done={progress > 40} label="Wrapped asset verified on Portaldot" />
                         <Step done={progress > 70} label="Mint transaction submitted" />
-                        <Step done={progress === 100} label="Confirmed in local Portaldot block" />
+                        <Step done={progress === 100} label="Confirmed in Portaldot block" />
                       </>
                     )}
                   </div>

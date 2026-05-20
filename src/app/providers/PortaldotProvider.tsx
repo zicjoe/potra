@@ -120,8 +120,13 @@ export function PortaldotProvider({ children }: { children: ReactNode }) {
     setIsClaimingFaucet(true);
     try {
       const result = await claimTestPot(selectedAccount.address);
-      toast.success(`Claimed ${result.amount} POT`, { description: result.txHash });
+      toast.success(`Claim submitted for ${result.amount} POT`, { description: result.txHash });
       await refreshBalance();
+      [2500, 6000, 10000].forEach((delay) => {
+        window.setTimeout(() => {
+          refreshBalance().catch(() => undefined);
+        }, delay);
+      });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Faucet claim failed");
     } finally {

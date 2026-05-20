@@ -72,6 +72,35 @@ export type LiquidityPosition = {
 };
 
 const LIQUIDITY_REGISTRY_KEY = "potra.liquidityPositions.v1";
+
+async function postLiquidityPosition(position: LiquidityPosition) {
+  if (!potraConfig.faucetApi) return;
+
+  try {
+    await fetch(`${potraConfig.faucetApi}/api/registry/liquidity`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(position),
+    });
+  } catch {
+    // Local storage remains the immediate fallback if the shared registry is unavailable.
+  }
+}
+
+export async function syncLiquidityPositionsFromBackend() {
+  if (!potraConfig.faucetApi) return getLiquidityPositions();
+
+  const response = await fetch(`${potraConfig.faucetApi}/api/registry/liquidity`);
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok || !data.ok || !Array.isArray(data.positions)) {
+    throw new Error(data.error || "Unable to load liquidity positions");
+  }
+
+  upsertLiquidityPositions(data.positions as LiquidityPosition[], false, false);
+  return getLiquidityPositions();
+}
+
 const MAX_U64 = new BN("18446744073709551615");
 
 function normalizeAmount(value: string, decimals: number, label: string) {
@@ -89,7 +118,7 @@ function normalizeAmount(value: string, decimals: number, label: string) {
     throw new Error(`${label} amount must be greater than zero`);
   }
   if (amount.gt(MAX_U64)) {
-    throw new Error(`${label} amount is too large for this local Portaldot asset flow`);
+    throw new Error(`${label} amount is too large for this Portaldot asset flow`);
   }
   return amount;
 }
@@ -277,7 +306,7 @@ export async function getDefaultMarketPositions(): Promise<LiquidityPosition[]> 
   }
 
   const markets = data.markets as LiquidityPosition[];
-  upsertLiquidityPositions(markets, false);
+  upsertLiquidityPositions(markets, false, false);
   return markets;
 }
 
@@ -285,11 +314,16 @@ export function saveLiquidityPosition(position: LiquidityPosition) {
   upsertLiquidityPositions([position], true);
 }
 
-export function upsertLiquidityPositions(positions: LiquidityPosition[], dispatch = true) {
+export function upsertLiquidityPositions(positions: LiquidityPosition[], dispatch = true, persist = true) {
   const existing = getLiquidityPositions();
   const incomingIds = new Set(positions.map((item) => item.id));
   const next = [...positions, ...existing.filter((item) => !incomingIds.has(item.id))].slice(0, 50);
   localStorage.setItem(LIQUIDITY_REGISTRY_KEY, JSON.stringify(next));
+  if (persist) {
+    for (const position of positions) {
+      void postLiquidityPosition(position);
+    }
+  }
 
   if (dispatch) {
     for (const position of positions) {
@@ -305,5 +339,6 @@ export function updateLiquidityPosition(position: LiquidityPosition) {
     ? existing.map((item) => item.id === position.id ? position : item)
     : [position, ...existing];
   localStorage.setItem(LIQUIDITY_REGISTRY_KEY, JSON.stringify(next.slice(0, 50)));
+  void postLiquidityPosition(position);
   window.dispatchEvent(new CustomEvent("potra:liquidity-updated", { detail: position }));
 }

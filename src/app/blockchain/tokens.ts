@@ -1,5 +1,5 @@
-import { getLaunchedAssets } from "./assets";
-import { getSupportedLiquidityAssets, type LiquidityAsset } from "./liquidity";
+import { getLaunchedAssets, syncLaunchedAssetsFromBackend } from "./assets";
+import { getSupportedLiquidityAssets, syncLiquidityPositionsFromBackend, type LiquidityAsset } from "./liquidity";
 
 export type TradeTokenOption = {
   symbol: string;
@@ -62,4 +62,12 @@ export function getDefaultPairToken(tokens: TradeTokenOption[]) {
 export function findMatchingToken(tokens: TradeTokenOption[], token?: TradeTokenOption) {
   if (!token) return undefined;
   return tokens.find((item) => sameToken(item, token));
+}
+
+export async function syncTradeRegistryFromBackend() {
+  await Promise.allSettled([
+    syncLaunchedAssetsFromBackend(),
+    syncLiquidityPositionsFromBackend(),
+  ]);
+  return getTradeTokens();
 }

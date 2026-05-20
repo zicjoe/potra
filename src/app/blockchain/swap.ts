@@ -46,6 +46,39 @@ export type SwapResult = {
 };
 
 const SWAP_HISTORY_KEY = "potra.swapHistory.v1";
+
+async function postSwapResult(result: SwapResult & { wallet?: string }) {
+  if (!potraConfig.faucetApi) return;
+
+  try {
+    await fetch(`${potraConfig.faucetApi}/api/registry/swaps`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...result, wallet: result.wallet || "" }),
+    });
+  } catch {
+    // Local storage remains the immediate fallback if the shared registry is unavailable.
+  }
+}
+
+export async function syncSwapHistoryFromBackend(wallet?: string) {
+  if (!potraConfig.faucetApi) return getSwapHistory();
+  const suffix = wallet ? `?wallet=${encodeURIComponent(wallet)}` : "";
+  const response = await fetch(`${potraConfig.faucetApi}/api/registry/swaps${suffix}`);
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok || !data.ok || !Array.isArray(data.swaps)) {
+    throw new Error(data.error || "Unable to load swaps");
+  }
+
+  const existing = getSwapHistory();
+  const incomingIds = new Set(data.swaps.map((item: SwapResult) => item.id));
+  const next = [...data.swaps, ...existing.filter((item) => !incomingIds.has(item.id))].slice(0, 100);
+  localStorage.setItem(SWAP_HISTORY_KEY, JSON.stringify(next));
+  window.dispatchEvent(new CustomEvent("potra:swap-executed", { detail: data.swaps[0] }));
+  return getSwapHistory();
+}
+
 const FEE_RATE = 0.003;
 const MAX_U64 = new BN("18446744073709551615");
 
@@ -218,7 +251,7 @@ export async function executeManagedSwap(params: ExecuteSwapParams, onProgress?:
     createdAt: new Date().toISOString(),
   };
 
-  saveSwapResult(result);
+  saveSwapResult(result, params.account.address);
   return result;
 }
 
@@ -232,9 +265,10 @@ export function getSwapHistory(): SwapResult[] {
   }
 }
 
-export function saveSwapResult(result: SwapResult) {
+export function saveSwapResult(result: SwapResult, wallet?: string) {
   const existing = getSwapHistory();
   const next = [result, ...existing.filter((item) => item.id !== result.id)].slice(0, 50);
   localStorage.setItem(SWAP_HISTORY_KEY, JSON.stringify(next));
+  if (wallet) void postSwapResult({ ...result, wallet });
   window.dispatchEvent(new CustomEvent("potra:swap-executed", { detail: result }));
 }

@@ -114,7 +114,7 @@ export function ActivityPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Activity Feed</h1>
-          <p className="text-muted-foreground mt-1">Recorded Potra actions from your local Portaldot workspace</p>
+          <p className="text-muted-foreground mt-1">Recorded Potra actions from the active Potra network</p>
         </div>
         <Button variant="outline" className="gap-2">
           <Filter className="size-4" /> Filters
@@ -124,7 +124,7 @@ export function ActivityPage() {
       <div className="grid grid-cols-3 gap-6">
         <Card className="bg-card/50 border-border/50">
           <CardHeader className="pb-2"><CardTitle className="text-sm font-normal text-muted-foreground">Recorded Actions</CardTitle></CardHeader>
-          <CardContent><p className="text-3xl font-bold">{allActivity.length}</p><p className="text-sm text-muted-foreground mt-1">Local browser registry</p></CardContent>
+          <CardContent><p className="text-3xl font-bold">{allActivity.length}</p><p className="text-sm text-muted-foreground mt-1">Shared registry</p></CardContent>
         </Card>
         <Card className="bg-card/50 border-border/50">
           <CardHeader className="pb-2"><CardTitle className="text-sm font-normal text-muted-foreground">Token Launches</CardTitle></CardHeader>
